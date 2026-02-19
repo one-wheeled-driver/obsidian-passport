@@ -1,0 +1,9 @@
+{
+  "id": "obs2pdf",
+  "name": "Export to PDF with Citations",
+  "version": "1.0.0",
+  "minAppVersion": "0.15.0",
+  "description": "Export the active document to PDF, converting Obsidian wiki-links to Pandoc citations.",
+  "author": "obs2pdf",
+  "isDesktopOnly": true
+}
