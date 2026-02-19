@@ -66,12 +66,65 @@ def extract_yaml_from_note(note_path):
     return None
 
 
+def build_vault_index(vault_path):
+    """Walk the vault and build a dict mapping each .md file's stem to its full path(s).
+
+    Skips the .obsidian/ directory (internal Obsidian config).
+    Returns e.g. {"Research Methods": [Path(".../Research Methods.md")]}
+    """
+    index = {}
+    vault = Path(vault_path)
+    for md_file in vault.rglob("*.md"):
+        # Skip .obsidian internal directory
+        try:
+            md_file.relative_to(vault / ".obsidian")
+            continue
+        except ValueError:
+            pass
+        stem = md_file.stem
+        index.setdefault(stem, []).append(md_file)
+    return index
+
+
+def resolve_note_path(note_name, vault_path, vault_index):
+    """Resolve a note name to a full path using Obsidian's resolution logic.
+
+    Resolution order:
+    1. Direct path — vault_path / "{note_name}.md" (absolute-from-root or root-level)
+    2. Vault-wide search — look up note_name (or its stem if it contains /) in vault_index
+    3. Return None if not found
+
+    Warns if multiple matches exist in the index.
+    """
+    vault = Path(vault_path)
+
+    # 1. Direct path from vault root
+    direct = vault / f"{note_name}.md"
+    if direct.exists():
+        return direct
+
+    # 2. Vault-wide search (shortest-path mode)
+    # If note_name contains a path separator, use just the stem for lookup
+    lookup_key = Path(note_name).stem if '/' in note_name or '\\' in note_name else note_name
+    matches = vault_index.get(lookup_key, [])
+    if matches:
+        if len(matches) > 1:
+            print(f"Warning: multiple notes named '{lookup_key}' found — using {matches[0]}",
+                  file=sys.stderr)
+        return matches[0]
+
+    return None
+
+
 def find_linked_notes(content, vault_path, strict=False):
     """Find all [[wiki-links]] (including transclusions) and return their metadata.
 
     Returns (metadata_dict, issues_list).
     Issues are dicts with 'type' ('file_not_found' or 'no_cite_key') and 'note'.
     """
+    # Build vault index once for efficient lookups
+    vault_index = build_vault_index(vault_path)
+
     # Match both [[...]] and ![[...]]
     links = re.findall(r'!?\[\[([^\]]+)\]\]', content)
     metadata = {}
@@ -91,16 +144,16 @@ def find_linked_notes(content, vault_path, strict=False):
             ext = Path(note_name).suffix.lower()
             if ext and ext != '.md':
                 # Check for sidecar note (e.g. paper.pdf → paper.md)
-                sidecar = Path(vault_path) / f"{Path(note_name).stem}.md"
-                if sidecar.exists():
+                sidecar = resolve_note_path(Path(note_name).stem, vault_path, vault_index)
+                if sidecar:
                     yaml_data = extract_yaml_from_note(sidecar)
                     if yaml_data and 'cite-key' in yaml_data:
                         metadata[note_name] = yaml_data
                 continue
 
         # Look up the markdown note
-        note_path = Path(vault_path) / f"{note_name}.md"
-        if note_path.exists():
+        note_path = resolve_note_path(note_name, vault_path, vault_index)
+        if note_path:
             yaml_data = extract_yaml_from_note(note_path)
             if yaml_data and 'cite-key' in yaml_data:
                 metadata[note_name] = yaml_data

@@ -430,3 +430,158 @@ class TestPandocIntegration:
 
         assert pdf_path is not None
         assert call_count["n"] == 2
+
+
+# ---------------------------------------------------------------------------
+# TestSubdirectoryResolution — notes in subfolders resolve via vault index
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def nested_vault(tmp_path):
+    """Create a test vault with notes inside subdirectories."""
+    v = tmp_path / "vault"
+    v.mkdir()
+
+    # Citable note in a subfolder
+    sub = v / "references"
+    sub.mkdir()
+    (sub / "Citable Note.md").write_text(textwrap.dedent("""\
+        ---
+        cite-key: citable2024
+        author: "Doe, Jane"
+        title: "A Citable Study"
+        year: 2024
+        type: article
+        journal: "Test Journal"
+        ---
+
+        Content of citable note.
+    """))
+
+    # Non-citable note in a different subfolder
+    sub2 = v / "notes"
+    sub2.mkdir()
+    (sub2 / "No Cite Note.md").write_text(textwrap.dedent("""\
+        ---
+        title: "Just a Regular Note"
+        author: "Smith, Bob"
+        ---
+
+        No cite-key here.
+    """))
+
+    # Sidecar note in subfolder for a PDF
+    (sub / "Sidecar Paper.md").write_text(textwrap.dedent("""\
+        ---
+        cite-key: sidecar2023
+        author: "Lee, Chris"
+        title: "Sidecar Paper Reference"
+        year: 2023
+        type: misc
+        url: "https://example.com/paper"
+        ---
+
+        Sidecar content.
+    """))
+
+    # Dummy files at vault root (where embeds are typically referenced)
+    (v / "Sidecar Paper.pdf").write_bytes(b"%PDF-1.0 dummy")
+    (v / "Orphan File.pdf").write_bytes(b"%PDF-1.0 dummy")
+    (v / "test_image.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 20)
+
+    # .obsidian directory should be ignored
+    obs_dir = v / ".obsidian"
+    obs_dir.mkdir()
+    (obs_dir / "Some Config.md").write_text("---\ncite-key: shouldignore\n---\n")
+
+    return v
+
+
+def _process_nested(vault, content, strict=False):
+    """Helper for nested vault tests."""
+    doc = vault / "test-doc.md"
+    doc.write_text(content)
+    with mock.patch("obs2pdf.run_pandoc", return_value=None):
+        md_path, bib_path, pdf_path = po.process_document(str(doc), str(vault), strict=strict)
+    output_text = Path(md_path).read_text()
+    bib_text = Path(bib_path).read_text()
+    return output_text, bib_text, md_path, bib_path, pdf_path
+
+
+class TestSubdirectoryResolution:
+    def test_citable_in_subfolder(self, nested_vault):
+        """[[Citable Note]] resolves even when note is in references/ subfolder."""
+        out, bib, *_ = _process_nested(nested_vault, "See [[Citable Note]] for details.")
+        assert "[@citable2024]" in out
+        assert "[[" not in out
+        assert "@article{citable2024" in bib
+
+    def test_noncitable_in_subfolder(self, nested_vault):
+        """[[No Cite Note]] in subfolder resolves to plain text."""
+        out, *_ = _process_nested(nested_vault, "See [[No Cite Note]] for info.")
+        assert "No Cite Note" in out
+        assert "[@" not in out
+        assert "[[" not in out
+
+    def test_sidecar_in_subfolder(self, nested_vault):
+        """Sidecar note in subfolder is found for ![[Sidecar Paper.pdf]]."""
+        out, bib, *_ = _process_nested(nested_vault, "Paper: ![[Sidecar Paper.pdf]]")
+        assert "[@sidecar2023]" in out
+        assert "@misc{sidecar2023" in bib
+
+    def test_missing_note_still_warns(self, nested_vault, capsys):
+        """Notes that don't exist anywhere still produce warnings."""
+        out, *_ = _process_nested(nested_vault, "See [[Ghost Note]] here.")
+        assert "Ghost Note" in out
+        assert "[[" not in out
+        err = capsys.readouterr().err
+        assert "not found in vault" in err
+
+    def test_obsidian_dir_ignored(self, nested_vault):
+        """Notes inside .obsidian/ should not be indexed."""
+        vault_index = po.build_vault_index(str(nested_vault))
+        assert "Some Config" not in vault_index
+
+    def test_heading_link_in_subfolder(self, nested_vault):
+        """[[Citable Note#Methods]] resolves from subfolder."""
+        out, *_ = _process_nested(nested_vault, "See [[Citable Note#Methods]].")
+        assert "[@citable2024]" in out
+
+    def test_alias_link_in_subfolder(self, nested_vault):
+        """[[Citable Note|the study]] resolves from subfolder."""
+        out, *_ = _process_nested(nested_vault, "See [[Citable Note|the study]].")
+        assert "[@citable2024]" in out
+
+
+class TestAmbiguousNoteWarning:
+    def test_multiple_matches_warns(self, tmp_path, capsys):
+        """When multiple notes share the same name, a warning is emitted."""
+        v = tmp_path / "vault"
+        v.mkdir()
+        (v / "folderA").mkdir()
+        (v / "folderB").mkdir()
+        (v / "folderA" / "Dup Note.md").write_text(textwrap.dedent("""\
+            ---
+            cite-key: dup2024
+            author: "A, Author"
+            title: "Dup"
+            year: 2024
+            type: misc
+            ---
+        """))
+        (v / "folderB" / "Dup Note.md").write_text(textwrap.dedent("""\
+            ---
+            cite-key: dup2024b
+            author: "B, Author"
+            title: "Dup B"
+            year: 2024
+            type: misc
+            ---
+        """))
+
+        doc = v / "test-doc.md"
+        doc.write_text("See [[Dup Note]].")
+        with mock.patch("obs2pdf.run_pandoc", return_value=None):
+            po.process_document(str(doc), str(v))
+        err = capsys.readouterr().err
+        assert "multiple notes named" in err.lower()
