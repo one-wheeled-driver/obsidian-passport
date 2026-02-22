@@ -13,6 +13,89 @@ PLUGIN_DIR = Path(__file__).resolve().parent
 CSL_FILE = PLUGIN_DIR / 'numbered-title.csl'
 TEMPLATES_DIR = PLUGIN_DIR / 'templates'
 
+# Matches an Obsidian callout block:
+#   > [!TYPE][+-]? Optional title
+#   > body line one
+#   > body line two
+CALLOUT_RE = re.compile(
+    r'^> \[!(\w+)\][+\-]?[ \t]*(.*)\n'  # header: type + optional title
+    r'((?:^>.*\n)*)',                     # body: zero or more lines starting with >
+    re.MULTILINE
+)
+
+# Maps every standard Obsidian callout type (lowercased) to one of the five
+# awesomebox environments shipped with eisvogel.  Unknown / custom types fall
+# back to noteblock so they always render without a LaTeX error.
+_AWESOMEBOX = {
+    # note / info family ──────────────────────────── noteblock (blue)
+    'note': 'noteblock', 'info': 'noteblock', 'todo': 'noteblock',
+    'abstract': 'noteblock', 'summary': 'noteblock', 'tldr': 'noteblock',
+    'question': 'noteblock', 'help': 'noteblock', 'faq': 'noteblock',
+    'example': 'noteblock', 'quote': 'noteblock', 'cite': 'noteblock',
+    # tip / success family ────────────────────────── tipblock (green)
+    'tip': 'tipblock', 'hint': 'tipblock',
+    'success': 'tipblock', 'check': 'tipblock', 'done': 'tipblock',
+    # warning family ──────────────────────────────── warningblock (orange)
+    'warning': 'warningblock', 'caution': 'warningblock', 'attention': 'warningblock',
+    # danger / error / failure family ─────────────── cautionblock (red)
+    'danger': 'cautionblock', 'error': 'cautionblock', 'bug': 'cautionblock',
+    'failure': 'cautionblock', 'fail': 'cautionblock', 'missing': 'cautionblock',
+    # important ───────────────────────────────────── importblock (red, radiation icon)
+    'important': 'importblock',
+}
+_AWESOMEBOX_FALLBACK = 'noteblock'
+
+
+def convert_callouts(content):
+    """Convert Obsidian callouts to awesomebox LaTeX environments.
+
+    Each callout is replaced with a pair of raw LaTeX fences understood by
+    pandoc, with the markdown body content left in between so pandoc still
+    processes inline formatting, citations, etc.
+
+    > [!NOTE] Title          becomes     ```{=latex}
+    > body                               \\begin{noteblock}
+                                         ```
+                                         **Title**
+
+                                         body
+
+                                         ```{=latex}
+                                         \\end{noteblock}
+                                         ```
+
+    The callout type is mapped to an awesomebox environment (see _AWESOMEBOX).
+    Unknown types fall back to noteblock — no LaTeX error is ever produced.
+    The +/- fold modifier is ignored.  Regular blockquotes are left untouched.
+    """
+    def replace_callout(match):
+        callout_type = match.group(1).lower()
+        explicit_title = match.group(2).strip()
+        raw_body = match.group(3)
+
+        # Strip the leading "> " or ">" prefix from each body line
+        body_lines = []
+        for line in raw_body.splitlines():
+            if line.startswith('> '):
+                body_lines.append(line[2:])
+            elif line.startswith('>'):
+                body_lines.append(line[1:])
+            else:
+                body_lines.append(line)
+
+        body = '\n'.join(body_lines).strip()
+        title = explicit_title if explicit_title else callout_type.title()
+        env = _AWESOMEBOX.get(callout_type, _AWESOMEBOX_FALLBACK)
+
+        result = f'```{{=latex}}\n\\begin{{{env}}}\n```\n'
+        result += f'**{title}**\n'
+        if body:
+            result += f'\n{body}\n'
+        result += f'\n```{{=latex}}\n\\end{{{env}}}\n```\n'
+        return result
+
+    return CALLOUT_RE.sub(replace_callout, content)
+
 
 def parse_link(raw):
     """Parse the content inside [[ ]] into components.
@@ -251,6 +334,22 @@ def convert_links_to_citations(content, metadata, vault_path):
     return re.sub(r'(!?)\[\[([^\]]+)\]\]', replace_link, content)
 
 
+def _inject_awesomebox(yaml_content):
+    """Add \\usepackage{awesomebox} to header-includes if not already present.
+
+    Mutates yaml_content in-place.  LaTeX silently ignores a duplicate
+    \\usepackage for a package that is already loaded, so calling this on a
+    document that already includes the package is harmless.
+    """
+    pkg = '\\usepackage{awesomebox}'
+    existing = yaml_content.get('header-includes', [])
+    if not isinstance(existing, list):
+        existing = [existing] if existing else []
+    if pkg not in existing:
+        existing.append(pkg)
+    yaml_content['header-includes'] = existing
+
+
 def resolve_template(template_name, vault_path, vault_template_dir="templates"):
     """Resolve a template name to an absolute path or bare name for pandoc.
 
@@ -323,7 +422,7 @@ def run_pandoc(md_path, bib_path, pdf_path, csl_path=None, toc=False,
 
 def process_document(input_file, vault_path, strict=False, toc=False,
                      template=None, vault_template_dir="templates",
-                     extra_vars=None, build_dir=None):
+                     extra_vars=None, callouts=False, build_dir=None):
     """Main processing function.
 
     Intermediates (markdown, bib) go to build_dir.  PDF is placed next to the
@@ -343,6 +442,10 @@ def process_document(input_file, vault_path, strict=False, toc=False,
     with open(input_file, 'r', encoding='utf-8') as f:
         content = f.read()
 
+    # Optionally convert Obsidian callouts to pandoc fenced divs
+    if callouts:
+        content = convert_callouts(content)
+
     # Find all linked notes and their metadata
     metadata, issues = find_linked_notes(content, vault_path, strict=strict)
 
@@ -355,7 +458,8 @@ def process_document(input_file, vault_path, strict=False, toc=False,
     # Convert wiki-links to citations
     converted_content = convert_links_to_citations(content, metadata, vault_path)
 
-    # Add bibliography reference to YAML if not present
+    # Add bibliography reference to YAML if not present; inject awesomebox
+    # package when callout conversion is active.
     yaml_match = re.match(r'^---\n(.*?)\n---\n', converted_content, re.DOTALL)
     if yaml_match:
         yaml_content = yaml.safe_load(yaml_match.group(1))
@@ -363,10 +467,18 @@ def process_document(input_file, vault_path, strict=False, toc=False,
             yaml_content['bibliography'] = str(bib_path)
         if 'reference-section-title' not in yaml_content:
             yaml_content['reference-section-title'] = 'References'
+        if callouts:
+            _inject_awesomebox(yaml_content)
 
         # Rebuild document with updated YAML
         new_yaml = yaml.dump(yaml_content, default_flow_style=False)
         converted_content = f"---\n{new_yaml}---\n" + converted_content[yaml_match.end():]
+    elif callouts:
+        # No front matter — prepend a minimal block to load awesomebox
+        yaml_content = {}
+        _inject_awesomebox(yaml_content)
+        new_yaml = yaml.dump(yaml_content, default_flow_style=False)
+        converted_content = f"---\n{new_yaml}---\n" + converted_content
 
     # Write processed markdown
     output_md_path = build_dir / f'{stem}.md'
@@ -417,9 +529,13 @@ if __name__ == "__main__":
                         metavar='KEY=VALUE',
                         help="Extra pandoc template variable, e.g. --var colorlinks=true "
                              "(can be given multiple times; document frontmatter overrides)")
+    parser.add_argument('--callouts', action='store_true',
+                        help="Convert Obsidian callouts (> [!NOTE]) to pandoc fenced divs "
+                             "(::: {.note}) for template-styled boxes")
 
     args = parser.parse_args()
     process_document(args.input_file, args.vault_path, strict=args.strict,
                      toc=args.toc, template=args.template,
                      vault_template_dir=args.vault_template_dir,
-                     extra_vars=args.extra_vars or None)
+                     extra_vars=args.extra_vars or None,
+                     callouts=args.callouts)

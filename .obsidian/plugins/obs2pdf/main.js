@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS = {
   templateName: "",
   vaultTemplateDir: "templates",
   extraVars: "",
+  callouts: false,
 };
 
 class Obs2PdfPlugin extends obsidian.Plugin {
@@ -61,6 +62,9 @@ class Obs2PdfPlugin extends obsidian.Plugin {
     }
     if (this.settings.vaultTemplateDir) {
       args.push("--vault-template-dir", this.settings.vaultTemplateDir);
+    }
+    if (this.settings.callouts) {
+      args.push("--callouts");
     }
     if (this.settings.extraVars) {
       const lines = this.settings.extraVars
@@ -162,6 +166,21 @@ class Obs2PdfSettingTab extends obsidian.PluginSettingTab {
           .setValue(this.plugin.settings.toc)
           .onChange(async (value) => {
             this.plugin.settings.toc = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new obsidian.Setting(containerEl)
+      .setName("Convert callouts to boxes")
+      .setDesc(
+        "Convert Obsidian callouts (> [!NOTE] …) to pandoc fenced divs (::: {.note} …). " +
+        "Requires a template that styles these divs (e.g. eisvogel with a custom filter)."
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.callouts)
+          .onChange(async (value) => {
+            this.plugin.settings.callouts = value;
             await this.plugin.saveSettings();
           })
       );

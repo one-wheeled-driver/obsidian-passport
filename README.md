@@ -232,6 +232,55 @@ colorlinks=true
 geometry=margin=2.5cm
 ```
 
+## Callout conversion
+
+Obsidian callouts (`> [!TYPE]`) can be automatically converted to **awesomebox** LaTeX environments using the `--callouts` flag. This is the box package used in eisvogel's official examples.
+
+```bash
+python3 .obsidian/plugins/obs2pdf/obs2pdf.py my-paper.md . --template eisvogel --callouts
+```
+
+`\usepackage{awesomebox}` is injected into the document preamble automatically — no manual front matter entry is needed.
+
+### Syntax supported
+
+All standard Obsidian callout variants are handled:
+
+```markdown
+> [!NOTE] Optional title
+> Body text here.
+> More body text.
+```
+
+```markdown
+> [!WARNING]
+> No explicit title — the type name ("Warning") is used automatically.
+```
+
+```markdown
+> [!TIP]+ Expanded by default    ← the +/- fold modifier is stripped
+> Tip content.
+```
+
+Regular blockquotes without `[!TYPE]` are left completely untouched.
+
+### Type mapping
+
+All standard Obsidian callout types are mapped to one of the five awesomebox environments. **Custom or unknown types always fall back to `noteblock`** — a LaTeX error is never produced.
+
+| Obsidian type(s) | awesomebox environment | Colour |
+|---|---|---|
+| `note`, `info`, `todo`, `abstract`, `summary`, `tldr`, `question`, `help`, `faq`, `example`, `quote`, `cite` | `noteblock` | blue |
+| `tip`, `hint`, `success`, `check`, `done` | `tipblock` | green |
+| `warning`, `caution`, `attention` | `warningblock` | orange |
+| `danger`, `error`, `bug`, `failure`, `fail`, `missing` | `cautionblock` | red |
+| `important` | `importblock` | red (radiation icon) |
+| *(anything else)* | `noteblock` | blue |
+
+### Enabling in Obsidian plugin settings
+
+Toggle **"Convert callouts to boxes"** in the plugin settings tab. This is equivalent to always passing `--callouts` on the command line.
+
 ## Strict mode
 
 By default, missing notes and notes without a `cite-key` produce warnings on stderr and the link is replaced with plain text. With `--strict`, the script aborts on the first such issue with exit code 1.

@@ -620,6 +620,136 @@ class TestAmbiguousNoteWarning:
 
 
 # ---------------------------------------------------------------------------
+# TestCallouts — Obsidian callout → pandoc fenced div conversion
+# ---------------------------------------------------------------------------
+
+class TestCallouts:
+    def test_basic_with_title(self):
+        content = "> [!NOTE] My Note\n> This is content\n"
+        result = po.convert_callouts(content)
+        assert "\\begin{noteblock}" in result
+        assert "**My Note**" in result
+        assert "This is content" in result
+        assert "\\end{noteblock}" in result
+        assert "> [!" not in result
+
+    def test_default_title_from_type(self):
+        """No explicit title → capitalised type name is used."""
+        result = po.convert_callouts("> [!WARNING]\n> Watch out!\n")
+        assert "\\begin{warningblock}" in result
+        assert "**Warning**" in result
+        assert "Watch out!" in result
+
+    def test_type_mapping(self):
+        """Each standard Obsidian type maps to the correct awesomebox env."""
+        cases = [
+            ("NOTE",      "noteblock"),
+            ("TIP",       "tipblock"),
+            ("WARNING",   "warningblock"),
+            ("DANGER",    "cautionblock"),
+            ("IMPORTANT", "importblock"),
+            ("SUCCESS",   "tipblock"),
+            ("BUG",       "cautionblock"),
+            ("QUESTION",  "noteblock"),
+        ]
+        for obsidian_type, expected_env in cases:
+            result = po.convert_callouts(f"> [!{obsidian_type}] Title\n> body\n")
+            assert f"\\begin{{{expected_env}}}" in result, \
+                f"[!{obsidian_type}] should map to {expected_env}"
+
+    def test_unknown_type_falls_back_to_noteblock(self):
+        """Custom / unknown callout types fall back to noteblock — no LaTeX error."""
+        result = po.convert_callouts("> [!MYCUSTOMTYPE] Title\n> body\n")
+        assert "\\begin{noteblock}" in result
+        assert "\\begin{mycustomtype}" not in result
+
+    def test_fold_modifier_plus_ignored(self):
+        result = po.convert_callouts("> [!TIP]+ Tip title\n> content\n")
+        assert "\\begin{tipblock}" in result
+        assert "**Tip title**" in result
+        assert "[!TIP]+" not in result
+
+    def test_fold_modifier_minus_ignored(self):
+        result = po.convert_callouts("> [!TIP]- Tip title\n> content\n")
+        assert "\\begin{tipblock}" in result
+        assert "**Tip title**" in result
+
+    def test_multiline_body(self):
+        content = "> [!INFO] Details\n> Line one\n> Line two\n> Line three\n"
+        result = po.convert_callouts(content)
+        assert "Line one" in result
+        assert "Line two" in result
+        assert "Line three" in result
+
+    def test_empty_body(self):
+        """Callout with header only and no body lines."""
+        result = po.convert_callouts("> [!NOTE] Just a header\n")
+        assert "\\begin{noteblock}" in result
+        assert "**Just a header**" in result
+        assert "\\end{noteblock}" in result
+
+    def test_blank_line_in_body(self):
+        """A bare '>' line inside the body becomes a blank line."""
+        content = "> [!NOTE] Title\n> First paragraph\n>\n> Second paragraph\n"
+        result = po.convert_callouts(content)
+        assert "First paragraph" in result
+        assert "Second paragraph" in result
+
+    def test_regular_blockquote_untouched(self):
+        """Regular blockquotes without [!TYPE] are not converted."""
+        content = "> This is a regular quote\n> Second line\n"
+        result = po.convert_callouts(content)
+        assert "> This is a regular quote" in result
+        assert "\\begin{" not in result
+
+    def test_multiple_callouts(self):
+        content = (
+            "> [!NOTE] First\n> Note content\n"
+            "\n"
+            "> [!WARNING] Second\n> Warning content\n"
+        )
+        result = po.convert_callouts(content)
+        assert "\\begin{noteblock}" in result
+        assert "\\begin{warningblock}" in result
+        assert "Note content" in result
+        assert "Warning content" in result
+
+    def test_callouts_disabled_by_default(self, vault):
+        """process_document leaves callouts untouched unless callouts=True."""
+        content = "> [!NOTE] A Note\n> Content here\n"
+        out, *_ = _process(vault, content)
+        assert "> [!NOTE]" in out
+        assert "\\begin{" not in out
+
+    def test_callouts_enabled_in_process(self, vault):
+        """With callouts=True, callouts are converted in the output document."""
+        content = "> [!NOTE] A Note\n> Content here\n"
+        out, *_ = _process(vault, content, callouts=True)
+        assert "\\begin{noteblock}" in out
+        assert "**A Note**" in out
+        assert "> [!NOTE]" not in out
+
+    def test_awesomebox_injected_into_yaml(self, vault):
+        """When callouts=True, \\usepackage{awesomebox} is added to header-includes."""
+        content = "---\ntitle: Test\n---\n\n> [!NOTE] Box\n> body\n"
+        out, *_ = _process(vault, content, callouts=True)
+        assert "awesomebox" in out
+
+    def test_awesomebox_injected_without_yaml(self, vault):
+        """When callouts=True and there is no front matter, a YAML block is prepended."""
+        content = "> [!NOTE] Box\n> body\n"
+        out, *_ = _process(vault, content, callouts=True)
+        assert "awesomebox" in out
+
+    def test_wikilinks_inside_callout_resolved(self, vault):
+        """[[wiki-links]] inside callout bodies are still resolved."""
+        content = "> [!NOTE] References\n> See [[Citable Note]] for details\n"
+        out, *_ = _process(vault, content, callouts=True)
+        assert "[@citable2024]" in out
+        assert "[[" not in out
+
+
+# ---------------------------------------------------------------------------
 # TestTocFlag — --toc is forwarded to pandoc
 # ---------------------------------------------------------------------------
 
