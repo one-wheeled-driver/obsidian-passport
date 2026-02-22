@@ -1,0 +1,10 @@
+{
+  "pythonPath": "python3",
+  "strictMode": false,
+  "openPdfAfterExport": true,
+  "toc": true,
+  "templateName": "eisvogel",
+  "vaultTemplateDir": "templates",
+  "extraVars": "",
+  "callouts": true
+}

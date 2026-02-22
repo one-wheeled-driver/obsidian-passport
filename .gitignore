@@ -1,9 +1,9 @@
 .obsidian/*
 !.obsidian/plugins/
 .obsidian/plugins/*
-!.obsidian/plugins/obs2pdf/
-.obsidian/plugins/obs2pdf/build/*
-!.obsidian/plugins/obs2pdf/build/.gitkeep
+!.obsidian/plugins/vault-passport/
+.obsidian/plugins/vault-passport/build/*
+!.obsidian/plugins/vault-passport/build/.gitkeep
 __pycache__/
 *.pyc
 .pytest_cache/

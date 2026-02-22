@@ -15,13 +15,13 @@ const DEFAULT_SETTINGS = {
   callouts: false,
 };
 
-class Obs2PdfPlugin extends obsidian.Plugin {
+class VaultPassportPlugin extends obsidian.Plugin {
   async onload() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
 
     this.addCommand({
-      id: "export-pdf-citations",
-      name: "Export to PDF with citations",
+      id: "vault-passport-export",
+      name: "Export document (Vault Passport)",
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         if (!file || file.extension !== "md") return false;
@@ -32,7 +32,7 @@ class Obs2PdfPlugin extends obsidian.Plugin {
       },
     });
 
-    this.addSettingTab(new Obs2PdfSettingTab(this.app, this));
+    this.addSettingTab(new VaultPassportSettingTab(this.app, this));
   }
 
   async saveSettings() {
@@ -42,12 +42,12 @@ class Obs2PdfPlugin extends obsidian.Plugin {
   runExport(activeFilePath) {
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof obsidian.FileSystemAdapter)) {
-      new obsidian.Notice("obs2pdf: Could not determine vault path.");
+      new obsidian.Notice("Vault Passport: Could not determine vault path.");
       return;
     }
     const vaultBase = adapter.getBasePath();
     const pluginDir = path.join(vaultBase, this.manifest.dir);
-    const scriptPath = path.join(pluginDir, "obs2pdf.py");
+    const scriptPath = path.join(pluginDir, "vault_passport.py");
     const absoluteFile = path.join(vaultBase, activeFilePath);
 
     const args = [scriptPath, absoluteFile, vaultBase];
@@ -76,7 +76,7 @@ class Obs2PdfPlugin extends obsidian.Plugin {
       }
     }
 
-    new obsidian.Notice("obs2pdf: Exporting\u2026");
+    new obsidian.Notice("Vault Passport: Exporting\u2026");
 
     child_process.execFile(
       this.settings.pythonPath,
@@ -85,12 +85,12 @@ class Obs2PdfPlugin extends obsidian.Plugin {
       (error, stdout, stderr) => {
         if (error) {
           const msg = (stderr && stderr.trim()) || error.message;
-          new obsidian.Notice("obs2pdf: Export failed.\n" + msg, 10000);
-          console.error("obs2pdf error:", error, stderr);
+          new obsidian.Notice("Vault Passport: Export failed.\n" + msg, 10000);
+          console.error("Vault Passport error:", error, stderr);
           return;
         }
 
-        new obsidian.Notice("obs2pdf: Export complete.\n" + stdout.trim(), 8000);
+        new obsidian.Notice("Vault Passport: Export complete.\n" + stdout.trim(), 8000);
 
         if (this.settings.openPdfAfterExport) {
           this.openPdf(absoluteFile);
@@ -111,7 +111,7 @@ class Obs2PdfPlugin extends obsidian.Plugin {
   }
 }
 
-class Obs2PdfSettingTab extends obsidian.PluginSettingTab {
+class VaultPassportSettingTab extends obsidian.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -173,8 +173,8 @@ class Obs2PdfSettingTab extends obsidian.PluginSettingTab {
     new obsidian.Setting(containerEl)
       .setName("Convert callouts to boxes")
       .setDesc(
-        "Convert Obsidian callouts (> [!NOTE] …) to pandoc fenced divs (::: {.note} …). " +
-        "Requires a template that styles these divs (e.g. eisvogel with a custom filter)."
+        "Convert Obsidian callouts (> [!NOTE] …) to styled awesomebox environments in the PDF. " +
+        "Works out of the box with the Eisvogel template."
       )
       .addToggle((toggle) =>
         toggle
@@ -237,4 +237,4 @@ class Obs2PdfSettingTab extends obsidian.PluginSettingTab {
   }
 }
 
-module.exports = Obs2PdfPlugin;
+module.exports = VaultPassportPlugin;

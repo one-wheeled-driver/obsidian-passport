@@ -1,4 +1,4 @@
-"""Comprehensive tests for obs2pdf.py."""
+"""Comprehensive tests for vault_passport.py."""
 import os
 import sys
 import shutil
@@ -9,10 +9,10 @@ from unittest import mock
 import pytest
 
 # Add plugin directory to path
-PLUGIN_DIR = Path(__file__).resolve().parent.parent / '.obsidian' / 'plugins' / 'obs2pdf'
+PLUGIN_DIR = Path(__file__).resolve().parent.parent / '.obsidian' / 'plugins' / 'vault-passport'
 sys.path.insert(0, str(PLUGIN_DIR))
 
-import obs2pdf as po
+import vault_passport as po
 
 
 # ---------------------------------------------------------------------------

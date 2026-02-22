@@ -509,7 +509,8 @@ def process_document(input_file, vault_path, strict=False, toc=False,
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Convert Obsidian wiki-links to Pandoc citations for PDF export."
+        description="Vault Passport — export Obsidian documents as self-contained PDFs "
+                    "with [[wiki-links]] resolved into proper citations."
     )
     parser.add_argument('input_file', help="Path to the main document (markdown)")
     parser.add_argument('vault_path', help="Path to the Obsidian vault root")
