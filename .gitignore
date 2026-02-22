@@ -1,2 +1,9 @@
-.obsidian/
-
+.obsidian/*
+!.obsidian/plugins/
+.obsidian/plugins/*
+!.obsidian/plugins/obs2pdf/
+.obsidian/plugins/obs2pdf/build/*
+!.obsidian/plugins/obs2pdf/build/.gitkeep
+__pycache__/
+*.pyc
+.pytest_cache/

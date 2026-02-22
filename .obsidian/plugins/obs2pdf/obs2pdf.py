@@ -9,7 +9,9 @@ import shutil
 from pathlib import Path
 
 IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.svg', '.bmp', '.webp'}
-CSL_FILE = Path(__file__).resolve().parent / 'numbered-title.csl'
+PLUGIN_DIR = Path(__file__).resolve().parent
+CSL_FILE = PLUGIN_DIR / 'numbered-title.csl'
+TEMPLATES_DIR = PLUGIN_DIR / 'templates'
 
 
 def parse_link(raw):
@@ -249,11 +251,52 @@ def convert_links_to_citations(content, metadata, vault_path):
     return re.sub(r'(!?)\[\[([^\]]+)\]\]', replace_link, content)
 
 
-def run_pandoc(md_path, bib_path, pdf_path):
+def resolve_template(template_name, vault_path, vault_template_dir="templates"):
+    """Resolve a template name to an absolute path or bare name for pandoc.
+
+    Resolution order:
+    1. <vault>/<vault_template_dir>/<name>  — shared vault template (syncs with vault)
+    2. <plugin>/templates/<name>            — per-user plugin template
+    3. <name> as-is                         — pandoc resolves from its user data dir
+
+    Returns a Path (for local files) or str (bare name), or None if template_name
+    is empty/None.
+    """
+    if not template_name:
+        return None
+
+    # 1. Vault-level template folder (shared across vault users)
+    vault_tmpl = Path(vault_path) / vault_template_dir / template_name
+    if vault_tmpl.exists():
+        return vault_tmpl
+
+    # 2. Plugin templates dir (per-user)
+    plugin_tmpl = TEMPLATES_DIR / template_name
+    if plugin_tmpl.exists():
+        return plugin_tmpl
+
+    # 3. Fall through to pandoc's own template resolution (e.g. system-wide install)
+    return template_name
+
+
+def run_pandoc(md_path, bib_path, pdf_path, csl_path=None, toc=False,
+               template=None, extra_vars=None):
     """Run pandoc to produce a PDF. Try with --citeproc first, fall back without."""
     if not shutil.which('pandoc'):
         print("Warning: pandoc not found — skipping PDF generation", file=sys.stderr)
         return None
+
+    # Common flags shared by both attempts
+    extra = []
+    if csl_path and Path(csl_path).exists():
+        extra.append(f'--csl={csl_path}')
+    if toc:
+        extra.append('--toc')
+    if template is not None:
+        extra.append(f'--template={template}')
+    if extra_vars:
+        for var in extra_vars:
+            extra.extend(['-V', var])
 
     # Try with citeproc + bibliography
     cmd_cite = [
@@ -261,7 +304,7 @@ def run_pandoc(md_path, bib_path, pdf_path):
         '-o', str(pdf_path),
         '--citeproc',
         f'--bibliography={bib_path}',
-    ]
+    ] + extra
     result = subprocess.run(cmd_cite, capture_output=True, text=True)
     if result.returncode == 0:
         return pdf_path
@@ -269,7 +312,7 @@ def run_pandoc(md_path, bib_path, pdf_path):
     # Citeproc failed — retry without bibliography
     print("Warning: pandoc --citeproc failed — generating PDF without resolved citations",
           file=sys.stderr)
-    cmd_plain = ['pandoc', str(md_path), '-o', str(pdf_path)]
+    cmd_plain = ['pandoc', str(md_path), '-o', str(pdf_path)] + extra
     result = subprocess.run(cmd_plain, capture_output=True, text=True)
     if result.returncode == 0:
         return pdf_path
@@ -278,12 +321,23 @@ def run_pandoc(md_path, bib_path, pdf_path):
     return None
 
 
-def process_document(input_file, vault_path, strict=False):
-    """Main processing function."""
+def process_document(input_file, vault_path, strict=False, toc=False,
+                     template=None, vault_template_dir="templates",
+                     extra_vars=None, build_dir=None):
+    """Main processing function.
+
+    Intermediates (markdown, bib) go to build_dir.  PDF is placed next to the
+    original input file.  If build_dir is None the default plugin build
+    directory is used.
+    """
     input_path = Path(input_file).resolve()
     stem = input_path.stem
-    output_dir = input_path.parent / stem
-    os.makedirs(output_dir, exist_ok=True)
+
+    # Intermediate build directory
+    if build_dir is None:
+        build_dir = PLUGIN_DIR / 'build'
+    build_dir = Path(build_dir)
+    os.makedirs(build_dir, exist_ok=True)
 
     # Read the main document
     with open(input_file, 'r', encoding='utf-8') as f:
@@ -293,7 +347,7 @@ def process_document(input_file, vault_path, strict=False):
     metadata, issues = find_linked_notes(content, vault_path, strict=strict)
 
     # Generate BibTeX file
-    bib_path = output_dir / 'references.bib'
+    bib_path = build_dir / 'references.bib'
     with open(bib_path, 'w', encoding='utf-8') as f:
         for note_name, yaml_data in metadata.items():
             f.write(yaml_to_bibtex(yaml_data))
@@ -306,36 +360,39 @@ def process_document(input_file, vault_path, strict=False):
     if yaml_match:
         yaml_content = yaml.safe_load(yaml_match.group(1))
         if 'bibliography' not in yaml_content:
-            yaml_content['bibliography'] = 'references.bib'
+            yaml_content['bibliography'] = str(bib_path)
         if 'reference-section-title' not in yaml_content:
             yaml_content['reference-section-title'] = 'References'
-        if 'csl' not in yaml_content and CSL_FILE.exists():
-            csl_dest = output_dir / CSL_FILE.name
-            shutil.copy2(CSL_FILE, csl_dest)
-            yaml_content['csl'] = CSL_FILE.name
 
         # Rebuild document with updated YAML
         new_yaml = yaml.dump(yaml_content, default_flow_style=False)
         converted_content = f"---\n{new_yaml}---\n" + converted_content[yaml_match.end():]
 
     # Write processed markdown
-    output_path = output_dir / f'{stem}_pandoc.md'
-    with open(output_path, 'w', encoding='utf-8') as f:
+    output_md_path = build_dir / f'{stem}.md'
+    with open(output_md_path, 'w', encoding='utf-8') as f:
         f.write(converted_content)
 
-    # Generate PDF via pandoc
-    pdf_path = output_dir / f'{stem}_pandoc.pdf'
-    pdf_result = run_pandoc(output_path, bib_path, pdf_path)
+    # Resolve template: vault folder → plugin folder → bare name for pandoc
+    resolved_template = resolve_template(template, vault_path, vault_template_dir)
+
+    # CSL path (absolute, never copied)
+    csl_path = CSL_FILE if CSL_FILE.exists() else None
+
+    # PDF goes next to the original document (no _pandoc suffix)
+    pdf_path = input_path.parent / f'{stem}.pdf'
+    pdf_result = run_pandoc(output_md_path, bib_path, pdf_path, csl_path=csl_path,
+                            toc=toc, template=resolved_template, extra_vars=extra_vars)
 
     print(f"Generated {bib_path}")
-    print(f"Generated {output_path}")
+    print(f"Generated {output_md_path}")
     if pdf_result:
         print(f"Generated {pdf_result}")
     print(f"Found {len(metadata)} citable references")
     if issues:
         print(f"{len(issues)} link(s) resolved as plain text (see warnings above)")
 
-    return output_path, bib_path, pdf_result
+    return output_md_path, bib_path, pdf_result
 
 
 if __name__ == "__main__":
@@ -346,6 +403,23 @@ if __name__ == "__main__":
     parser.add_argument('vault_path', help="Path to the Obsidian vault root")
     parser.add_argument('--strict', action='store_true',
                         help="Abort on missing notes or notes without cite-key")
+    parser.add_argument('--toc', action='store_true',
+                        help="Include a table of contents in the PDF")
+    parser.add_argument('--template', type=str, default=None,
+                        help="Template name or filename. Resolved from vault template "
+                             "folder, then plugin templates/, then passed as-is to pandoc "
+                             "(e.g. a system-wide install like 'eisvogel')")
+    parser.add_argument('--vault-template-dir', type=str, default='templates',
+                        dest='vault_template_dir',
+                        help="Folder relative to vault root to search for templates "
+                             "(default: templates)")
+    parser.add_argument('--var', action='append', dest='extra_vars', default=[],
+                        metavar='KEY=VALUE',
+                        help="Extra pandoc template variable, e.g. --var colorlinks=true "
+                             "(can be given multiple times; document frontmatter overrides)")
 
     args = parser.parse_args()
-    process_document(args.input_file, args.vault_path, strict=args.strict)
+    process_document(args.input_file, args.vault_path, strict=args.strict,
+                     toc=args.toc, template=args.template,
+                     vault_template_dir=args.vault_template_dir,
+                     extra_vars=args.extra_vars or None)

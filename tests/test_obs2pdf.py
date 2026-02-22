@@ -8,8 +8,9 @@ from unittest import mock
 
 import pytest
 
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# Add plugin directory to path
+PLUGIN_DIR = Path(__file__).resolve().parent.parent / '.obsidian' / 'plugins' / 'obs2pdf'
+sys.path.insert(0, str(PLUGIN_DIR))
 
 import obs2pdf as po
 
@@ -91,11 +92,13 @@ def _write_doc(vault, content):
     return doc
 
 
-def _process(vault, content, strict=False):
+def _process(vault, content, strict=False, **kwargs):
     """Helper: write a doc, process it, return (output_text, bib_text, md_path, bib_path, pdf_path)."""
     doc = _write_doc(vault, content)
+    kwargs.setdefault('build_dir', vault.parent / 'build')
     with mock.patch("obs2pdf.run_pandoc", return_value=None):
-        md_path, bib_path, pdf_path = po.process_document(str(doc), str(vault), strict=strict)
+        md_path, bib_path, pdf_path = po.process_document(
+            str(doc), str(vault), strict=strict, **kwargs)
     output_text = Path(md_path).read_text()
     bib_text = Path(bib_path).read_text()
     return output_text, bib_text, md_path, bib_path, pdf_path
@@ -336,27 +339,50 @@ class TestBibTeX:
 
 
 # ---------------------------------------------------------------------------
-# TestOutputLocation — subfolder name, _pandoc filename, bib in same dir
+# TestOutputLocation — intermediates in build dir, PDF next to input, no CSL copy
 # ---------------------------------------------------------------------------
 
 class TestOutputLocation:
-    def test_subfolder_name(self, vault):
+    def test_intermediates_in_build_dir(self, vault):
         doc = _write_doc(vault, "[[Citable Note]]")
+        build_dir = vault.parent / "build"
         with mock.patch("obs2pdf.run_pandoc", return_value=None):
-            md_path, bib_path, _ = po.process_document(str(doc), str(vault))
-        assert Path(md_path).parent.name == "test-doc"
+            md_path, bib_path, _ = po.process_document(
+                str(doc), str(vault), build_dir=build_dir)
+        assert Path(md_path).parent == build_dir
+        assert Path(bib_path).parent == build_dir
 
-    def test_pandoc_suffix(self, vault):
+    def test_md_filename_no_pandoc_suffix(self, vault):
         doc = _write_doc(vault, "[[Citable Note]]")
+        build_dir = vault.parent / "build"
         with mock.patch("obs2pdf.run_pandoc", return_value=None):
-            md_path, _, _ = po.process_document(str(doc), str(vault))
-        assert Path(md_path).name == "test-doc_pandoc.md"
+            md_path, _, _ = po.process_document(
+                str(doc), str(vault), build_dir=build_dir)
+        assert Path(md_path).name == "test-doc.md"
 
-    def test_bib_in_same_dir(self, vault):
+    def test_pdf_next_to_input(self, vault):
+        """PDF path should be next to the original input, not in a subfolder."""
         doc = _write_doc(vault, "[[Citable Note]]")
+        build_dir = vault.parent / "build"
+        pdf_calls = []
+        def capture_pandoc(md_path, bib_path, pdf_path, **kw):
+            pdf_calls.append(pdf_path)
+            return None
+        with mock.patch("obs2pdf.run_pandoc", side_effect=capture_pandoc):
+            po.process_document(str(doc), str(vault), build_dir=build_dir)
+        assert len(pdf_calls) == 1
+        assert Path(pdf_calls[0]).parent == doc.parent
+        assert Path(pdf_calls[0]).name == "test-doc.pdf"
+
+    def test_no_csl_copy(self, vault):
+        """CSL file should never be copied to the output directory."""
+        doc = _write_doc(vault, "[[Citable Note]]")
+        build_dir = vault.parent / "build"
         with mock.patch("obs2pdf.run_pandoc", return_value=None):
-            md_path, bib_path, _ = po.process_document(str(doc), str(vault))
-        assert Path(md_path).parent == Path(bib_path).parent
+            po.process_document(str(doc), str(vault), build_dir=build_dir)
+        # No numbered-title.csl should appear in build_dir or next to input
+        assert not (build_dir / "numbered-title.csl").exists()
+        assert not (doc.parent / "numbered-title.csl").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -384,13 +410,15 @@ class TestStrictMode:
         doc = _write_doc(vault, "[[Ghost]]")
         with pytest.raises(SystemExit):
             with mock.patch("obs2pdf.run_pandoc", return_value=None):
-                po.process_document(str(doc), str(vault), strict=True)
+                po.process_document(str(doc), str(vault), strict=True,
+                                    build_dir=vault.parent / 'build')
 
     def test_strict_no_cite_key(self, vault):
         doc = _write_doc(vault, "[[No Cite Note]]")
         with pytest.raises(SystemExit):
             with mock.patch("obs2pdf.run_pandoc", return_value=None):
-                po.process_document(str(doc), str(vault), strict=True)
+                po.process_document(str(doc), str(vault), strict=True,
+                                    build_dir=vault.parent / 'build')
 
 
 # ---------------------------------------------------------------------------
@@ -401,7 +429,8 @@ class TestPandocIntegration:
     def test_pandoc_not_found(self, vault, capsys):
         doc = _write_doc(vault, "[[Citable Note]]")
         with mock.patch("shutil.which", return_value=None):
-            md_path, bib_path, pdf_path = po.process_document(str(doc), str(vault))
+            md_path, bib_path, pdf_path = po.process_document(
+                str(doc), str(vault), build_dir=vault.parent / 'build')
         assert pdf_path is None
         err = capsys.readouterr().err
         assert "pandoc not found" in err
@@ -426,7 +455,8 @@ class TestPandocIntegration:
 
         with mock.patch("shutil.which", return_value="/usr/bin/pandoc"), \
              mock.patch("subprocess.run", side_effect=fake_run):
-            md_path, bib_path, pdf_path = po.process_document(str(doc), str(vault))
+            md_path, bib_path, pdf_path = po.process_document(
+                str(doc), str(vault), build_dir=vault.parent / 'build')
 
         assert pdf_path is not None
         assert call_count["n"] == 2
@@ -497,12 +527,14 @@ def nested_vault(tmp_path):
     return v
 
 
-def _process_nested(vault, content, strict=False):
+def _process_nested(vault, content, strict=False, **kwargs):
     """Helper for nested vault tests."""
     doc = vault / "test-doc.md"
     doc.write_text(content)
+    kwargs.setdefault('build_dir', vault.parent / 'build')
     with mock.patch("obs2pdf.run_pandoc", return_value=None):
-        md_path, bib_path, pdf_path = po.process_document(str(doc), str(vault), strict=strict)
+        md_path, bib_path, pdf_path = po.process_document(
+            str(doc), str(vault), strict=strict, **kwargs)
     output_text = Path(md_path).read_text()
     bib_text = Path(bib_path).read_text()
     return output_text, bib_text, md_path, bib_path, pdf_path
@@ -582,6 +614,170 @@ class TestAmbiguousNoteWarning:
         doc = v / "test-doc.md"
         doc.write_text("See [[Dup Note]].")
         with mock.patch("obs2pdf.run_pandoc", return_value=None):
-            po.process_document(str(doc), str(v))
+            po.process_document(str(doc), str(v), build_dir=tmp_path / 'build')
         err = capsys.readouterr().err
         assert "multiple notes named" in err.lower()
+
+
+# ---------------------------------------------------------------------------
+# TestTocFlag — --toc is forwarded to pandoc
+# ---------------------------------------------------------------------------
+
+class TestTocFlag:
+    def test_toc_passed_to_pandoc(self, vault):
+        """When toc=True, --toc appears in the pandoc command."""
+        doc = _write_doc(vault, "[[Citable Note]]")
+        pandoc_cmds = []
+
+        def capture_run(cmd, **kwargs):
+            pandoc_cmds.append(cmd)
+            rc = mock.MagicMock()
+            rc.returncode = 0
+            rc.stderr = ""
+            return rc
+
+        with mock.patch("shutil.which", return_value="/usr/bin/pandoc"), \
+             mock.patch("subprocess.run", side_effect=capture_run):
+            po.process_document(str(doc), str(vault), toc=True,
+                                build_dir=vault.parent / 'build')
+
+        assert any("--toc" in cmd for cmd in pandoc_cmds)
+
+    def test_no_toc_by_default(self, vault):
+        """When toc is not set, --toc should not appear in the pandoc command."""
+        doc = _write_doc(vault, "[[Citable Note]]")
+        pandoc_cmds = []
+
+        def capture_run(cmd, **kwargs):
+            pandoc_cmds.append(cmd)
+            rc = mock.MagicMock()
+            rc.returncode = 0
+            rc.stderr = ""
+            return rc
+
+        with mock.patch("shutil.which", return_value="/usr/bin/pandoc"), \
+             mock.patch("subprocess.run", side_effect=capture_run):
+            po.process_document(str(doc), str(vault),
+                                build_dir=vault.parent / 'build')
+
+        assert all("--toc" not in cmd for cmd in pandoc_cmds)
+
+
+# ---------------------------------------------------------------------------
+# TestTemplateSupport — template resolution (vault → plugin → system-wide)
+# ---------------------------------------------------------------------------
+
+class TestTemplateSupport:
+    def test_plugin_template_passed_to_pandoc(self, vault):
+        """Template in plugin templates/ dir is resolved to an absolute path."""
+        templates_dir = po.TEMPLATES_DIR
+        templates_dir.mkdir(parents=True, exist_ok=True)
+        template_file = templates_dir / "custom.latex"
+        template_file.write_text("% dummy template")
+
+        doc = _write_doc(vault, "[[Citable Note]]")
+        pandoc_cmds = []
+
+        def capture_run(cmd, **kwargs):
+            pandoc_cmds.append(cmd)
+            rc = mock.MagicMock()
+            rc.returncode = 0
+            rc.stderr = ""
+            return rc
+
+        try:
+            with mock.patch("shutil.which", return_value="/usr/bin/pandoc"), \
+                 mock.patch("subprocess.run", side_effect=capture_run):
+                po.process_document(str(doc), str(vault), template="custom.latex",
+                                    build_dir=vault.parent / 'build')
+
+            assert any(any("--template=" in arg for arg in cmd) for cmd in pandoc_cmds)
+        finally:
+            template_file.unlink(missing_ok=True)
+
+    def test_vault_template_takes_priority(self, vault):
+        """Vault-level template takes priority over plugin templates/ dir."""
+        vault_templates = vault / "templates"
+        vault_templates.mkdir()
+        vault_tmpl = vault_templates / "shared.latex"
+        vault_tmpl.write_text("% vault template")
+
+        plugin_tmpl = po.TEMPLATES_DIR / "shared.latex"
+        po.TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
+        plugin_tmpl.write_text("% plugin template")
+
+        pandoc_calls = []
+
+        def capture_pandoc(md_path, bib_path, pdf_path, **kw):
+            pandoc_calls.append(kw)
+            return None
+
+        doc = _write_doc(vault, "[[Citable Note]]")
+        try:
+            with mock.patch("obs2pdf.run_pandoc", side_effect=capture_pandoc):
+                po.process_document(str(doc), str(vault), template="shared.latex",
+                                    build_dir=vault.parent / 'build')
+            assert pandoc_calls[0]["template"] == vault_tmpl
+        finally:
+            vault_tmpl.unlink(missing_ok=True)
+            plugin_tmpl.unlink(missing_ok=True)
+
+    def test_custom_vault_template_dir(self, vault):
+        """Custom vault_template_dir is respected."""
+        custom_dir = vault / "pandoc-templates"
+        custom_dir.mkdir()
+        tmpl = custom_dir / "mytemplate.latex"
+        tmpl.write_text("% custom dir template")
+
+        pandoc_calls = []
+
+        def capture_pandoc(md_path, bib_path, pdf_path, **kw):
+            pandoc_calls.append(kw)
+            return None
+
+        doc = _write_doc(vault, "[[Citable Note]]")
+        try:
+            with mock.patch("obs2pdf.run_pandoc", side_effect=capture_pandoc):
+                po.process_document(str(doc), str(vault), template="mytemplate.latex",
+                                    vault_template_dir="pandoc-templates",
+                                    build_dir=vault.parent / 'build')
+            assert pandoc_calls[0]["template"] == tmpl
+        finally:
+            tmpl.unlink(missing_ok=True)
+
+    def test_unresolved_template_passed_as_bare_name(self, vault):
+        """Template not found locally is passed as bare name to pandoc (system-wide lookup)."""
+        pandoc_calls = []
+
+        def capture_pandoc(md_path, bib_path, pdf_path, **kw):
+            pandoc_calls.append(kw)
+            return None
+
+        doc = _write_doc(vault, "[[Citable Note]]")
+        with mock.patch("obs2pdf.run_pandoc", side_effect=capture_pandoc):
+            po.process_document(str(doc), str(vault), template="eisvogel",
+                                build_dir=vault.parent / 'build')
+        assert pandoc_calls[0]["template"] == "eisvogel"
+
+    def test_extra_vars_passed_to_pandoc(self, vault):
+        """Extra vars appear as -V key=value in the pandoc command."""
+        doc = _write_doc(vault, "[[Citable Note]]")
+        pandoc_cmds = []
+
+        def capture_run(cmd, **kwargs):
+            pandoc_cmds.append(cmd)
+            rc = mock.MagicMock()
+            rc.returncode = 0
+            rc.stderr = ""
+            return rc
+
+        with mock.patch("shutil.which", return_value="/usr/bin/pandoc"), \
+             mock.patch("subprocess.run", side_effect=capture_run):
+            po.process_document(str(doc), str(vault),
+                                extra_vars=["colorlinks=true", "geometry=margin=2cm"],
+                                build_dir=vault.parent / 'build')
+
+        flat = [arg for cmd in pandoc_cmds for arg in cmd]
+        assert "-V" in flat
+        assert "colorlinks=true" in flat
+        assert "geometry=margin=2cm" in flat
