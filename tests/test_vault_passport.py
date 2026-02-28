@@ -96,7 +96,7 @@ def _process(vault, content, strict=False, **kwargs):
     """Helper: write a doc, process it, return (output_text, bib_text, md_path, bib_path, pdf_path)."""
     doc = _write_doc(vault, content)
     kwargs.setdefault('build_dir', vault.parent / 'build')
-    with mock.patch("obs2pdf.run_pandoc", return_value=None):
+    with mock.patch("vault_passport.run_pandoc", return_value=None):
         md_path, bib_path, pdf_path = po.process_document(
             str(doc), str(vault), strict=strict, **kwargs)
     output_text = Path(md_path).read_text()
@@ -346,7 +346,7 @@ class TestOutputLocation:
     def test_intermediates_in_build_dir(self, vault):
         doc = _write_doc(vault, "[[Citable Note]]")
         build_dir = vault.parent / "build"
-        with mock.patch("obs2pdf.run_pandoc", return_value=None):
+        with mock.patch("vault_passport.run_pandoc", return_value=None):
             md_path, bib_path, _ = po.process_document(
                 str(doc), str(vault), build_dir=build_dir)
         assert Path(md_path).parent == build_dir
@@ -355,7 +355,7 @@ class TestOutputLocation:
     def test_md_filename_no_pandoc_suffix(self, vault):
         doc = _write_doc(vault, "[[Citable Note]]")
         build_dir = vault.parent / "build"
-        with mock.patch("obs2pdf.run_pandoc", return_value=None):
+        with mock.patch("vault_passport.run_pandoc", return_value=None):
             md_path, _, _ = po.process_document(
                 str(doc), str(vault), build_dir=build_dir)
         assert Path(md_path).name == "test-doc.md"
@@ -368,7 +368,7 @@ class TestOutputLocation:
         def capture_pandoc(md_path, bib_path, pdf_path, **kw):
             pdf_calls.append(pdf_path)
             return None
-        with mock.patch("obs2pdf.run_pandoc", side_effect=capture_pandoc):
+        with mock.patch("vault_passport.run_pandoc", side_effect=capture_pandoc):
             po.process_document(str(doc), str(vault), build_dir=build_dir)
         assert len(pdf_calls) == 1
         assert Path(pdf_calls[0]).parent == doc.parent
@@ -378,7 +378,7 @@ class TestOutputLocation:
         """CSL file should never be copied to the output directory."""
         doc = _write_doc(vault, "[[Citable Note]]")
         build_dir = vault.parent / "build"
-        with mock.patch("obs2pdf.run_pandoc", return_value=None):
+        with mock.patch("vault_passport.run_pandoc", return_value=None):
             po.process_document(str(doc), str(vault), build_dir=build_dir)
         # No numbered-title.csl should appear in build_dir or next to input
         assert not (build_dir / "numbered-title.csl").exists()
@@ -409,14 +409,14 @@ class TestStrictMode:
     def test_strict_missing_note(self, vault):
         doc = _write_doc(vault, "[[Ghost]]")
         with pytest.raises(SystemExit):
-            with mock.patch("obs2pdf.run_pandoc", return_value=None):
+            with mock.patch("vault_passport.run_pandoc", return_value=None):
                 po.process_document(str(doc), str(vault), strict=True,
                                     build_dir=vault.parent / 'build')
 
     def test_strict_no_cite_key(self, vault):
         doc = _write_doc(vault, "[[No Cite Note]]")
         with pytest.raises(SystemExit):
-            with mock.patch("obs2pdf.run_pandoc", return_value=None):
+            with mock.patch("vault_passport.run_pandoc", return_value=None):
                 po.process_document(str(doc), str(vault), strict=True,
                                     build_dir=vault.parent / 'build')
 
@@ -532,7 +532,7 @@ def _process_nested(vault, content, strict=False, **kwargs):
     doc = vault / "test-doc.md"
     doc.write_text(content)
     kwargs.setdefault('build_dir', vault.parent / 'build')
-    with mock.patch("obs2pdf.run_pandoc", return_value=None):
+    with mock.patch("vault_passport.run_pandoc", return_value=None):
         md_path, bib_path, pdf_path = po.process_document(
             str(doc), str(vault), strict=strict, **kwargs)
     output_text = Path(md_path).read_text()
@@ -613,7 +613,7 @@ class TestAmbiguousNoteWarning:
 
         doc = v / "test-doc.md"
         doc.write_text("See [[Dup Note]].")
-        with mock.patch("obs2pdf.run_pandoc", return_value=None):
+        with mock.patch("vault_passport.run_pandoc", return_value=None):
             po.process_document(str(doc), str(v), build_dir=tmp_path / 'build')
         err = capsys.readouterr().err
         assert "multiple notes named" in err.lower()
@@ -647,7 +647,7 @@ class TestCallouts:
             ("TIP",       "tipblock"),
             ("WARNING",   "warningblock"),
             ("DANGER",    "cautionblock"),
-            ("IMPORTANT", "importblock"),
+            ("IMPORTANT", "noteblock"),
             ("SUCCESS",   "tipblock"),
             ("BUG",       "cautionblock"),
             ("QUESTION",  "noteblock"),
@@ -844,7 +844,7 @@ class TestTemplateSupport:
 
         doc = _write_doc(vault, "[[Citable Note]]")
         try:
-            with mock.patch("obs2pdf.run_pandoc", side_effect=capture_pandoc):
+            with mock.patch("vault_passport.run_pandoc", side_effect=capture_pandoc):
                 po.process_document(str(doc), str(vault), template="shared.latex",
                                     build_dir=vault.parent / 'build')
             assert pandoc_calls[0]["template"] == vault_tmpl
@@ -867,7 +867,7 @@ class TestTemplateSupport:
 
         doc = _write_doc(vault, "[[Citable Note]]")
         try:
-            with mock.patch("obs2pdf.run_pandoc", side_effect=capture_pandoc):
+            with mock.patch("vault_passport.run_pandoc", side_effect=capture_pandoc):
                 po.process_document(str(doc), str(vault), template="mytemplate.latex",
                                     vault_template_dir="pandoc-templates",
                                     build_dir=vault.parent / 'build')
@@ -884,7 +884,7 @@ class TestTemplateSupport:
             return None
 
         doc = _write_doc(vault, "[[Citable Note]]")
-        with mock.patch("obs2pdf.run_pandoc", side_effect=capture_pandoc):
+        with mock.patch("vault_passport.run_pandoc", side_effect=capture_pandoc):
             po.process_document(str(doc), str(vault), template="eisvogel",
                                 build_dir=vault.parent / 'build')
         assert pandoc_calls[0]["template"] == "eisvogel"
@@ -911,3 +911,69 @@ class TestTemplateSupport:
         assert "-V" in flat
         assert "colorlinks=true" in flat
         assert "geometry=margin=2cm" in flat
+
+
+class TestLogoPathResolution:
+    """titlepage-logo / logo relative paths are resolved to absolute before pandoc runs."""
+
+    def _process_with_frontmatter(self, vault, frontmatter):
+        """Write a doc with the given YAML front matter and run process_document."""
+        doc = vault / "test-doc.md"
+        doc.write_text(f"---\n{frontmatter}\n---\nBody text.\n")
+        intermediate_mds = []
+
+        def capture_pandoc(md_path, bib_path, pdf_path, **kw):
+            intermediate_mds.append(Path(md_path).read_text())
+            return None
+
+        with mock.patch("vault_passport.run_pandoc", side_effect=capture_pandoc):
+            po.process_document(str(doc), str(vault),
+                                build_dir=vault.parent / "build")
+
+        return intermediate_mds[0]
+
+    def _parse_frontmatter(self, md):
+        """Extract and parse the YAML front matter from an intermediate markdown string."""
+        import yaml as _yaml
+        fm_text = md.split('---\n', 2)[1]
+        return _yaml.safe_load(fm_text)
+
+    def test_titlepage_logo_relative_resolved_to_absolute(self, tmp_path):
+        """A relative titlepage-logo path is expanded to an absolute path."""
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        logo = vault / "assets" / "logo.png"
+        logo.parent.mkdir()
+        logo.write_bytes(b"\x89PNG\r\n\x1a\n")
+
+        md = self._process_with_frontmatter(vault, "titlepage-logo: assets/logo.png")
+
+        data = self._parse_frontmatter(md)
+        assert Path(data["titlepage-logo"]).is_absolute()
+        assert Path(data["titlepage-logo"]) == logo.resolve()
+
+    def test_logo_relative_resolved_to_absolute(self, tmp_path):
+        """The legacy 'logo' key is also resolved to an absolute path."""
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        logo = vault / "logo.png"
+        logo.write_bytes(b"\x89PNG\r\n\x1a\n")
+
+        md = self._process_with_frontmatter(vault, "logo: logo.png")
+
+        data = self._parse_frontmatter(md)
+        assert Path(data["logo"]).is_absolute()
+        assert Path(data["logo"]) == logo.resolve()
+
+    def test_absolute_logo_path_unchanged(self, tmp_path):
+        """An already-absolute titlepage-logo path is left as-is."""
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        logo = tmp_path / "elsewhere" / "logo.png"
+        logo.parent.mkdir()
+        logo.write_bytes(b"\x89PNG\r\n\x1a\n")
+
+        md = self._process_with_frontmatter(vault, f"titlepage-logo: {logo}")
+
+        data = self._parse_frontmatter(md)
+        assert Path(data["titlepage-logo"]) == logo

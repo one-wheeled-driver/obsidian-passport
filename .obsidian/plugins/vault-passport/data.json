@@ -5,6 +5,6 @@
   "toc": true,
   "templateName": "eisvogel",
   "vaultTemplateDir": "templates",
-  "extraVars": "",
+  "extraVars": "colorlinks=true\nnumbersections=true\ntitlepage=true",
   "callouts": true
 }

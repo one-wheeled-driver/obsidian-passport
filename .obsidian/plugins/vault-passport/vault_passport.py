@@ -13,6 +13,57 @@ PLUGIN_DIR = Path(__file__).resolve().parent
 CSL_FILE = PLUGIN_DIR / 'numbered-title.csl'
 TEMPLATES_DIR = PLUGIN_DIR / 'templates'
 
+
+def _split_fenced_blocks(content):
+    """Split content into (in_code, chunk) pairs.
+
+    Chunks where in_code=True are fenced code blocks (``` or ~~~) that should
+    be left untouched.  Chunks where in_code=False are regular prose that can
+    be processed freely.
+
+    Handles opening fences of any length (``` vs ``````) and ensures the
+    closing fence uses the same character and is at least as long.
+    """
+    lines = content.splitlines(keepends=True)
+    segments = []
+    i = 0
+    plain_start = 0
+
+    while i < len(lines):
+        open_m = re.match(r'^(`{3,}|~{3,})', lines[i])
+        if open_m:
+            fence_char = open_m.group(1)[0]
+            fence_len = len(open_m.group(1))
+
+            # Emit accumulated plain text before this fence
+            plain = ''.join(lines[plain_start:i])
+            if plain:
+                segments.append((False, plain))
+
+            # Find the matching closing fence
+            j = i + 1
+            while j < len(lines):
+                close_m = re.match(r'^(`{3,}|~{3,})\s*$', lines[j])
+                if (close_m and close_m.group(1)[0] == fence_char
+                        and len(close_m.group(1)) >= fence_len):
+                    break
+                j += 1
+            # j is the closing fence line (or end-of-file if unclosed)
+
+            code_block = ''.join(lines[i:j + 1])
+            segments.append((True, code_block))
+            i = j + 1
+            plain_start = i
+        else:
+            i += 1
+
+    # Remaining plain text after the last fence
+    plain = ''.join(lines[plain_start:])
+    if plain:
+        segments.append((False, plain))
+
+    return segments
+
 # Matches an Obsidian callout block:
 #   > [!TYPE][+-]? Optional title
 #   > body line one
@@ -40,8 +91,8 @@ _AWESOMEBOX = {
     # danger / error / failure family ─────────────── cautionblock (red)
     'danger': 'cautionblock', 'error': 'cautionblock', 'bug': 'cautionblock',
     'failure': 'cautionblock', 'fail': 'cautionblock', 'missing': 'cautionblock',
-    # important ───────────────────────────────────── importblock (red, radiation icon)
-    'important': 'importblock',
+    # important ───────────────────────────────────── falls back to noteblock (blue)
+    # importantblock/importblock exists in some awesomebox versions but not all
 }
 _AWESOMEBOX_FALLBACK = 'noteblock'
 
@@ -94,7 +145,33 @@ def convert_callouts(content):
         result += f'\n```{{=latex}}\n\\end{{{env}}}\n```\n'
         return result
 
-    return CALLOUT_RE.sub(replace_callout, content)
+    parts = []
+    for in_code, chunk in _split_fenced_blocks(content):
+        parts.append(chunk if in_code else CALLOUT_RE.sub(replace_callout, chunk))
+    return ''.join(parts)
+
+
+def _protect_inline_code(text):
+    """Replace inline code spans with NUL-delimited placeholders.
+
+    Returns (protected_text, restore_fn).  Call restore_fn on the processed
+    text to put the original code spans back.  This prevents wiki-link
+    substitution from touching content inside backticks.
+    """
+    spans = []
+
+    def _replace(m):
+        spans.append(m.group(0))
+        return f'\x00CODE{len(spans) - 1}\x00'
+
+    protected = re.sub(r'`+[^`\n]+`+', _replace, text)
+
+    def _restore(s):
+        for i, span in enumerate(spans):
+            s = s.replace(f'\x00CODE{i}\x00', span)
+        return s
+
+    return protected, _restore
 
 
 def parse_link(raw):
@@ -210,8 +287,14 @@ def find_linked_notes(content, vault_path, strict=False):
     # Build vault index once for efficient lookups
     vault_index = build_vault_index(vault_path)
 
-    # Match both [[...]] and ![[...]]
-    links = re.findall(r'!?\[\[([^\]]+)\]\]', content)
+    # Match both [[...]] and ![[...]], skipping fenced code blocks and
+    # inline code spans (e.g. `[[Note]]`) to avoid false wiki-link matches.
+    prose = ''.join(
+        chunk for in_code, chunk in _split_fenced_blocks(content) if not in_code
+    )
+    # Strip inline code spans before scanning for links
+    prose_no_inline = re.sub(r'`+[^`]+`+', '', prose)
+    links = re.findall(r'!?\[\[([^\]]+)\]\]', prose_no_inline)
     metadata = {}
     issues = []
     seen = set()
@@ -331,7 +414,15 @@ def convert_links_to_citations(content, metadata, vault_path):
             return f"{note_name}, block {block_id}"
         return note_name
 
-    return re.sub(r'(!?)\[\[([^\]]+)\]\]', replace_link, content)
+    parts = []
+    for in_code, chunk in _split_fenced_blocks(content):
+        if in_code:
+            parts.append(chunk)
+        else:
+            protected, restore = _protect_inline_code(chunk)
+            replaced = re.sub(r'(!?)\[\[([^\]]+)\]\]', replace_link, protected)
+            parts.append(restore(replaced))
+    return ''.join(parts)
 
 
 def _inject_awesomebox(yaml_content):
@@ -380,7 +471,12 @@ def resolve_template(template_name, vault_path, vault_template_dir="templates"):
 
 def run_pandoc(md_path, bib_path, pdf_path, csl_path=None, toc=False,
                template=None, extra_vars=None):
-    """Run pandoc to produce a PDF. Try with --citeproc first, fall back without."""
+    """Run pandoc to produce a PDF. Try with --citeproc first, fall back without.
+
+    Defaults to xelatex as the PDF engine for full Unicode support and
+    compatibility with templates like eisvogel.  Override by including
+    'pdf-engine=pdflatex' (or any other engine) in extra_vars.
+    """
     if not shutil.which('pandoc'):
         print("Warning: pandoc not found — skipping PDF generation", file=sys.stderr)
         return None
@@ -397,6 +493,11 @@ def run_pandoc(md_path, bib_path, pdf_path, csl_path=None, toc=False,
         for var in extra_vars:
             extra.extend(['-V', var])
 
+    # Default to xelatex for Unicode support unless the caller already
+    # specified a pdf-engine via extra_vars.
+    if not extra_vars or not any(v.startswith('pdf-engine=') for v in extra_vars):
+        extra.append('--pdf-engine=xelatex')
+
     # Try with citeproc + bibliography
     cmd_cite = [
         'pandoc', str(md_path),
@@ -411,12 +512,13 @@ def run_pandoc(md_path, bib_path, pdf_path, csl_path=None, toc=False,
     # Citeproc failed — retry without bibliography
     print("Warning: pandoc --citeproc failed — generating PDF without resolved citations",
           file=sys.stderr)
+    print(f"  pandoc said: {result.stderr.strip()}", file=sys.stderr)
     cmd_plain = ['pandoc', str(md_path), '-o', str(pdf_path)] + extra
     result = subprocess.run(cmd_plain, capture_output=True, text=True)
     if result.returncode == 0:
         return pdf_path
 
-    print(f"Warning: pandoc failed — {result.stderr.strip()}", file=sys.stderr)
+    print(f"Error: pandoc failed — {result.stderr.strip()}", file=sys.stderr)
     return None
 
 
@@ -469,6 +571,16 @@ def process_document(input_file, vault_path, strict=False, toc=False,
             yaml_content['reference-section-title'] = 'References'
         if callouts:
             _inject_awesomebox(yaml_content)
+
+        # Resolve titlepage-logo to an absolute path so xelatex can find it
+        # regardless of which temp directory pandoc compiles in.
+        for logo_key in ('titlepage-logo', 'logo'):
+            if logo_key in yaml_content:
+                logo_path = Path(yaml_content[logo_key])
+                if not logo_path.is_absolute():
+                    yaml_content[logo_key] = str(
+                        (Path(vault_path) / logo_path).resolve()
+                    )
 
         # Rebuild document with updated YAML
         new_yaml = yaml.dump(yaml_content, default_flow_style=False)
@@ -535,8 +647,12 @@ if __name__ == "__main__":
                              "(::: {.note}) for template-styled boxes")
 
     args = parser.parse_args()
-    process_document(args.input_file, args.vault_path, strict=args.strict,
-                     toc=args.toc, template=args.template,
-                     vault_template_dir=args.vault_template_dir,
-                     extra_vars=args.extra_vars or None,
-                     callouts=args.callouts)
+    _, _, pdf_result = process_document(
+        args.input_file, args.vault_path, strict=args.strict,
+        toc=args.toc, template=args.template,
+        vault_template_dir=args.vault_template_dir,
+        extra_vars=args.extra_vars or None,
+        callouts=args.callouts,
+    )
+    if not pdf_result:
+        sys.exit(1)

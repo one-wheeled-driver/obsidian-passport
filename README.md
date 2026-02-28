@@ -1,3 +1,20 @@
+---
+cite-key: README
+type: misc
+title: README
+subtitle:
+author: Dominik Lorenz
+year:
+date: 2026-02-23
+titlepage: true
+header-right: ""
+numbersections: true
+geometry: margin=2.5cm
+colorlinks: true
+linkcolor: blue
+urlcolor: blue
+citecolor: blue
+---
 # Vault Passport
 
 > Give your Obsidian notes a passport to the outside world.
@@ -14,8 +31,8 @@ Each linked note that has a `cite-key` in its YAML front matter becomes a `[@cit
 
 - Python 3.6+
 - [pyyaml](https://pypi.org/project/PyYAML/)
-- [Pandoc 3.x](https://pandoc.org/) (optional — required for PDF generation)
-- A LaTeX distribution (optional — required for PDF generation via Pandoc)
+- [Pandoc 3.x](https://pandoc.org/)
+- A LaTeX distribution with **XeLaTeX** — included in [TeX Live](https://tug.org/texlive/) and [MiKTeX](https://miktex.org/)
 
 ## Installation
 
@@ -185,10 +202,13 @@ python3 vault_passport.py my-paper.md . --template eisvogel \
   --var titlepage-rule-height=4
 
 # Cover page with a logo
+# The logo path is relative to the vault root — Vault Passport resolves it to
+# an absolute path automatically so xelatex can find it regardless of where
+# the script is invoked from.
 python3 vault_passport.py my-paper.md . --template eisvogel \
   --var titlepage=true \
-  --var logo=assets/logo.png \
-  --var logo-width=100
+  --var titlepage-logo=assets/logo.png \
+  --var logo-width=60mm
 
 # Custom header and footer
 python3 vault_passport.py my-paper.md . --template eisvogel \
@@ -259,10 +279,17 @@ python3 .obsidian/plugins/vault-passport/vault_passport.py my-paper.md . \
 > More body text.
 ```
 
+> [!NOTE] Optional title
+> Body text here.
+> More body text.
+
 ```markdown
 > [!WARNING]
 > No explicit title — the type name ("Warning") is used automatically.
 ```
+
+> [!WARNING]
+> No explicit title — the type name ("Warning") is used automatically.
 
 ```markdown
 > [!TIP]+ Expanded by default    ← the +/- fold modifier is stripped
@@ -281,8 +308,11 @@ All standard Obsidian callout types map to one of the five awesomebox environmen
 | `tip`, `hint`, `success`, `check`, `done` | `tipblock` | green |
 | `warning`, `caution`, `attention` | `warningblock` | orange |
 | `danger`, `error`, `bug`, `failure`, `fail`, `missing` | `cautionblock` | red |
-| `important` | `importblock` | red (radiation icon) |
+| `important` | `noteblock` | blue |
 | *(anything else)* | `noteblock` | blue |
+
+> **Note on `important`:** awesomebox v0.6 (shipped with TeX Live) provides an `importantblock` environment, but it was renamed across versions and is not consistently available. To avoid LaTeX errors on standard installations, `important` is mapped to the safe `noteblock` fallback instead.
+
 
 Toggle **"Convert callouts to boxes"** in the plugin settings tab to enable this globally without the command-line flag.
 
