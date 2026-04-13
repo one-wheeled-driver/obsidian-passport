@@ -426,17 +426,17 @@ class TestStrictMode:
 # ---------------------------------------------------------------------------
 
 class TestPandocIntegration:
-    def test_pandoc_not_found(self, vault, capsys):
+    def test_docker_not_found(self, vault, capsys):
         doc = _write_doc(vault, "[[Citable Note]]")
         with mock.patch("shutil.which", return_value=None):
             md_path, bib_path, pdf_path = po.process_document(
                 str(doc), str(vault), build_dir=vault.parent / 'build')
         assert pdf_path is None
         err = capsys.readouterr().err
-        assert "pandoc not found" in err
+        assert "docker not found" in err
 
-    def test_pandoc_citeproc_fallback(self, vault):
-        """When --citeproc fails, pandoc retries without it."""
+    def test_citeproc_fallback(self, vault):
+        """When --citeproc fails, docker pandoc retries without it."""
         doc = _write_doc(vault, "[[Citable Note]]")
 
         call_count = {"n": 0}
@@ -453,7 +453,7 @@ class TestPandocIntegration:
                 rc.stderr = ""
             return rc
 
-        with mock.patch("shutil.which", return_value="/usr/bin/pandoc"), \
+        with mock.patch("shutil.which", return_value="/usr/bin/docker"), \
              mock.patch("subprocess.run", side_effect=fake_run):
             md_path, bib_path, pdf_path = po.process_document(
                 str(doc), str(vault), build_dir=vault.parent / 'build')
@@ -766,7 +766,7 @@ class TestTocFlag:
             rc.stderr = ""
             return rc
 
-        with mock.patch("shutil.which", return_value="/usr/bin/pandoc"), \
+        with mock.patch("shutil.which", return_value="/usr/bin/docker"), \
              mock.patch("subprocess.run", side_effect=capture_run):
             po.process_document(str(doc), str(vault), toc=True,
                                 build_dir=vault.parent / 'build')
@@ -785,7 +785,7 @@ class TestTocFlag:
             rc.stderr = ""
             return rc
 
-        with mock.patch("shutil.which", return_value="/usr/bin/pandoc"), \
+        with mock.patch("shutil.which", return_value="/usr/bin/docker"), \
              mock.patch("subprocess.run", side_effect=capture_run):
             po.process_document(str(doc), str(vault),
                                 build_dir=vault.parent / 'build')
@@ -816,7 +816,7 @@ class TestTemplateSupport:
             return rc
 
         try:
-            with mock.patch("shutil.which", return_value="/usr/bin/pandoc"), \
+            with mock.patch("shutil.which", return_value="/usr/bin/docker"), \
                  mock.patch("subprocess.run", side_effect=capture_run):
                 po.process_document(str(doc), str(vault), template="custom.latex",
                                     build_dir=vault.parent / 'build')
@@ -901,7 +901,7 @@ class TestTemplateSupport:
             rc.stderr = ""
             return rc
 
-        with mock.patch("shutil.which", return_value="/usr/bin/pandoc"), \
+        with mock.patch("shutil.which", return_value="/usr/bin/docker"), \
              mock.patch("subprocess.run", side_effect=capture_run):
             po.process_document(str(doc), str(vault),
                                 extra_vars=["colorlinks=true", "geometry=margin=2cm"],

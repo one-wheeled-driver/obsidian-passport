@@ -470,42 +470,86 @@ def resolve_template(template_name, vault_path, vault_template_dir="templates"):
 
 
 def run_pandoc(md_path, bib_path, pdf_path, csl_path=None, toc=False,
-               template=None, extra_vars=None):
-    """Run pandoc to produce a PDF. Try with --citeproc first, fall back without.
+               template=None, extra_vars=None, vault_path=None):
+    """Run pandoc via the pandoc/extra Docker image to produce a PDF.
 
-    Defaults to xelatex as the PDF engine for full Unicode support and
-    compatibility with templates like eisvogel.  Override by including
-    'pdf-engine=pdflatex' (or any other engine) in extra_vars.
+    The entire vault (or a common ancestor of all input paths) is mounted as
+    /vault inside the container so all local files are reachable.  The
+    pandoc/extra image ships with eisvogel and other common templates, so bare
+    template names like 'eisvogel' resolve without any local file needed.
+
+    Try with --citeproc first; fall back to a plain run without citations if
+    citeproc is unavailable.
     """
-    if not shutil.which('pandoc'):
-        print("Warning: pandoc not found — skipping PDF generation", file=sys.stderr)
+    if not shutil.which('docker'):
+        print("Warning: docker not found — skipping PDF generation", file=sys.stderr)
         return None
 
-    # Common flags shared by both attempts
+    md_path = Path(md_path).resolve()
+    bib_path = Path(bib_path).resolve()
+    pdf_path = Path(pdf_path).resolve()
+
+    # Primary mount: vault root (or computed common ancestor of md/bib/pdf)
+    if vault_path:
+        mount_root = Path(vault_path).resolve()
+    else:
+        mount_root = md_path.parent
+        for p in (bib_path, pdf_path):
+            while mount_root not in p.parents and p.parent != mount_root:
+                mount_root = mount_root.parent
+
+    # Extra volume mounts for files outside mount_root (e.g. shared CSL or
+    # templates that live outside the vault during testing).
+    extra_mounts = {}   # host_dir_str → container_prefix
+    _ext_idx = [0]
+
+    def host_to_container(path):
+        """Map a host path to its /vault/… container path, registering extra mounts as needed."""
+        path = Path(path).resolve()
+        try:
+            return '/vault/' + str(path.relative_to(mount_root))
+        except ValueError:
+            host_dir = str(path.parent)
+            if host_dir not in extra_mounts:
+                extra_mounts[host_dir] = f'/ext{_ext_idx[0]}'
+                _ext_idx[0] += 1
+            return extra_mounts[host_dir] + '/' + path.name
+
+    # Build pandoc flags (host_to_container() calls populate extra_mounts as a side effect)
     extra = []
     if csl_path and Path(csl_path).exists():
-        extra.append(f'--csl={csl_path}')
+        extra.append(f'--csl={host_to_container(csl_path)}')
     if toc:
         extra.append('--toc')
     if template is not None:
-        extra.append(f'--template={template}')
+        if isinstance(template, Path):
+            extra.append(f'--template={host_to_container(template)}')
+        else:
+            # Bare name (e.g. 'eisvogel') — pandoc/extra resolves from its data dir
+            extra.append(f'--template={template}')
     if extra_vars:
         for var in extra_vars:
             extra.extend(['-V', var])
-
-    # Default to xelatex for Unicode support unless the caller already
-    # specified a pdf-engine via extra_vars.
     if not extra_vars or not any(v.startswith('pdf-engine=') for v in extra_vars):
         extra.append('--pdf-engine=xelatex')
 
+    # Assemble volume args (primary mount + any extra mounts for external files)
+    volume_args = ['-v', f'{mount_root}:/vault']
+    for host_dir, container_prefix in extra_mounts.items():
+        volume_args += ['-v', f'{host_dir}:{container_prefix}:ro']
+
+    base_cmd = [
+        'docker', 'run', '--rm',
+    ] + volume_args + [
+        'pandoc/extra',
+        host_to_container(md_path), '-o', host_to_container(pdf_path),
+    ]
+
     # Try with citeproc + bibliography
-    cmd_cite = [
-        'pandoc', str(md_path),
-        '-o', str(pdf_path),
-        '--citeproc',
-        f'--bibliography={bib_path}',
-    ] + extra
-    result = subprocess.run(cmd_cite, capture_output=True, text=True)
+    result = subprocess.run(
+        base_cmd + ['--citeproc', f'--bibliography={host_to_container(bib_path)}'] + extra,
+        capture_output=True, text=True,
+    )
     if result.returncode == 0:
         return pdf_path
 
@@ -513,12 +557,11 @@ def run_pandoc(md_path, bib_path, pdf_path, csl_path=None, toc=False,
     print("Warning: pandoc --citeproc failed — generating PDF without resolved citations",
           file=sys.stderr)
     print(f"  pandoc said: {result.stderr.strip()}", file=sys.stderr)
-    cmd_plain = ['pandoc', str(md_path), '-o', str(pdf_path)] + extra
-    result = subprocess.run(cmd_plain, capture_output=True, text=True)
+    result = subprocess.run(base_cmd + extra, capture_output=True, text=True)
     if result.returncode == 0:
         return pdf_path
 
-    print(f"Error: pandoc failed — {result.stderr.strip()}", file=sys.stderr)
+    print(f"Error: pandoc (docker) failed — {result.stderr.strip()}", file=sys.stderr)
     return None
 
 
@@ -603,10 +646,12 @@ def process_document(input_file, vault_path, strict=False, toc=False,
     # CSL path (absolute, never copied)
     csl_path = CSL_FILE if CSL_FILE.exists() else None
 
-    # PDF goes next to the original document (no _pandoc suffix)
+    # PDF goes next to the original document
     pdf_path = input_path.parent / f'{stem}.pdf'
+
     pdf_result = run_pandoc(output_md_path, bib_path, pdf_path, csl_path=csl_path,
-                            toc=toc, template=resolved_template, extra_vars=extra_vars)
+                            toc=toc, template=resolved_template, extra_vars=extra_vars,
+                            vault_path=vault_path)
 
     print(f"Generated {bib_path}")
     print(f"Generated {output_md_path}")
