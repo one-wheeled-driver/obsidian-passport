@@ -216,6 +216,32 @@ def is_image(filename):
     return Path(filename).suffix.lower() in IMAGE_EXTENSIONS
 
 
+def _note_name_to_cite_key(note_name):
+    """Derive a BibTeX-safe cite key from a note's display name.
+
+    'Behavioral Economics Review' → 'behavioral-economics-review'
+    'Urban Mobility (2024)'       → 'urban-mobility-2024'
+    """
+    key = note_name.lower()
+    key = re.sub(r'[^a-z0-9]+', '-', key)
+    key = key.strip('-')
+    return key or 'note'
+
+
+def _ensure_citable(yaml_data, note_name):
+    """Return yaml_data with cite-key and title guaranteed present.
+
+    Leaves explicit values untouched; derives cite-key from note_name when
+    absent, and uses note_name as the title fallback.
+    """
+    data = dict(yaml_data) if yaml_data else {}
+    if 'cite-key' not in data:
+        data['cite-key'] = _note_name_to_cite_key(note_name)
+    if 'title' not in data:
+        data['title'] = note_name
+    return data
+
+
 def extract_yaml_from_note(note_path):
     """Extract YAML front matter from a note."""
     with open(note_path, 'r', encoding='utf-8') as f:
@@ -281,8 +307,12 @@ def resolve_note_path(note_name, vault_path, vault_index):
 def find_linked_notes(content, vault_path, strict=False):
     """Find all [[wiki-links]] (including transclusions) and return their metadata.
 
+    Every note found in the vault is made citable: if the note has an explicit
+    cite-key in its front matter that value is used; otherwise a cite key is
+    derived from the note name and the file stem is used as the title fallback.
+
     Returns (metadata_dict, issues_list).
-    Issues are dicts with 'type' ('file_not_found' or 'no_cite_key') and 'note'.
+    Issues are dicts with 'type' 'file_not_found' and 'note'.
     """
     # Build vault index once for efficient lookups
     vault_index = build_vault_index(vault_path)
@@ -315,26 +345,14 @@ def find_linked_notes(content, vault_path, strict=False):
                 sidecar = resolve_note_path(Path(note_name).stem, vault_path, vault_index)
                 if sidecar:
                     yaml_data = extract_yaml_from_note(sidecar)
-                    if yaml_data and 'cite-key' in yaml_data:
-                        metadata[note_name] = yaml_data
+                    metadata[note_name] = _ensure_citable(yaml_data, Path(note_name).stem)
                 continue
 
         # Look up the markdown note
         note_path = resolve_note_path(note_name, vault_path, vault_index)
         if note_path:
             yaml_data = extract_yaml_from_note(note_path)
-            if yaml_data and 'cite-key' in yaml_data:
-                metadata[note_name] = yaml_data
-            else:
-                issue = {'type': 'no_cite_key', 'note': note_name}
-                issues.append(issue)
-                msg = f"Warning: '{note_name}.md' has no cite-key — will use plain text"
-                if strict:
-                    print(msg, file=sys.stderr)
-                    print("Aborting (--strict mode).", file=sys.stderr)
-                    sys.exit(1)
-                else:
-                    print(msg, file=sys.stderr)
+            metadata[note_name] = _ensure_citable(yaml_data, note_name)
         else:
             issue = {'type': 'file_not_found', 'note': note_name}
             issues.append(issue)

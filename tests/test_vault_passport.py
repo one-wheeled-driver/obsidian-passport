@@ -191,45 +191,52 @@ class TestLinksCitable:
 # ---------------------------------------------------------------------------
 
 class TestLinksNonCitable:
+    """Notes without an explicit cite-key get an auto-generated one and become citable."""
+
     def test_basic_wikilink(self, vault):
         out, *_ = _process(vault, "See [[No Cite Note]] for info.")
-        assert "No Cite Note" in out
-        assert "[@" not in out
+        assert "[@no-cite-note]" in out
         assert "[[" not in out
 
     def test_alias_wikilink(self, vault):
         out, *_ = _process(vault, "See [[No Cite Note|my note]] here.")
-        assert "my note" in out
+        assert "[@no-cite-note]" in out
         assert "[[" not in out
 
     def test_heading_link(self, vault):
         out, *_ = _process(vault, "See [[No Cite Note#Intro]].")
-        assert "No Cite Note, section Intro" in out
+        assert "[@no-cite-note]" in out
+        assert "[[" not in out
 
     def test_heading_alias_link(self, vault):
         out, *_ = _process(vault, "See [[No Cite Note#Intro|intro text]].")
-        assert "intro text" in out
+        assert "[@no-cite-note]" in out
+        assert "[[" not in out
 
     def test_block_link(self, vault):
         out, *_ = _process(vault, "See [[No Cite Note#^blk1]].")
-        assert "No Cite Note, block blk1" in out
+        assert "[@no-cite-note]" in out
+        assert "[[" not in out
 
     def test_block_alias_link(self, vault):
         out, *_ = _process(vault, "See [[No Cite Note#^blk1|ref]].")
-        assert "ref" in out
+        assert "[@no-cite-note]" in out
+        assert "[[" not in out
 
     def test_transclusion(self, vault):
         out, *_ = _process(vault, "Embed: ![[No Cite Note]]")
-        assert "No Cite Note" in out
+        assert "[@no-cite-note]" in out
         assert "[[" not in out
 
     def test_transclusion_heading(self, vault):
         out, *_ = _process(vault, "Embed: ![[No Cite Note#Intro]]")
-        assert "No Cite Note, section Intro" in out
+        assert "[@no-cite-note]" in out
+        assert "[[" not in out
 
     def test_transclusion_block(self, vault):
         out, *_ = _process(vault, "Embed: ![[No Cite Note#^blk1]]")
-        assert "No Cite Note, block blk1" in out
+        assert "[@no-cite-note]" in out
+        assert "[[" not in out
 
 
 # ---------------------------------------------------------------------------
@@ -332,10 +339,11 @@ class TestBibTeX:
         _, bib, *_ = _process(vault, "![[Sidecar Paper.pdf]]")
         assert "@misc{sidecar2023" in bib
 
-    def test_noncitable_excluded(self, vault):
+    def test_auto_key_generated_for_note_without_cite_key(self, vault):
         _, bib, *_ = _process(vault, "[[No Cite Note]]")
-        assert "No Cite Note" not in bib
-        assert "Smith" not in bib
+        assert "@misc{no-cite-note" in bib
+        assert "title = {Just a Regular Note}" in bib
+        assert "author = {Smith, Bob}" in bib
 
 
 # ---------------------------------------------------------------------------
@@ -395,11 +403,6 @@ class TestWarnings:
         err = capsys.readouterr().err
         assert "not found in vault" in err
 
-    def test_no_cite_key_warning(self, vault, capsys):
-        _process(vault, "[[No Cite Note]]")
-        err = capsys.readouterr().err
-        assert "no cite-key" in err
-
 
 # ---------------------------------------------------------------------------
 # TestStrictMode — SystemExit on missing note, SystemExit on no cite-key
@@ -413,12 +416,14 @@ class TestStrictMode:
                 po.process_document(str(doc), str(vault), strict=True,
                                     build_dir=vault.parent / 'build')
 
-    def test_strict_no_cite_key(self, vault):
+    def test_strict_note_without_cite_key_does_not_abort(self, vault):
+        """Notes without explicit cite-key now get an auto-generated one — not an error."""
         doc = _write_doc(vault, "[[No Cite Note]]")
-        with pytest.raises(SystemExit):
-            with mock.patch("vault_passport.run_pandoc", return_value=None):
-                po.process_document(str(doc), str(vault), strict=True,
-                                    build_dir=vault.parent / 'build')
+        with mock.patch("vault_passport.run_pandoc", return_value=None):
+            md_path, _, _ = po.process_document(str(doc), str(vault), strict=True,
+                                                build_dir=vault.parent / 'build')
+        out = Path(md_path).read_text()
+        assert "[@no-cite-note]" in out
 
 
 # ---------------------------------------------------------------------------
@@ -549,10 +554,9 @@ class TestSubdirectoryResolution:
         assert "@article{citable2024" in bib
 
     def test_noncitable_in_subfolder(self, nested_vault):
-        """[[No Cite Note]] in subfolder resolves to plain text."""
+        """[[No Cite Note]] in subfolder gets an auto-generated cite key."""
         out, *_ = _process_nested(nested_vault, "See [[No Cite Note]] for info.")
-        assert "No Cite Note" in out
-        assert "[@" not in out
+        assert "[@no-cite-note]" in out
         assert "[[" not in out
 
     def test_sidecar_in_subfolder(self, nested_vault):
