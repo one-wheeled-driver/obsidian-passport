@@ -4,6 +4,23 @@
 !.obsidian/plugins/vault-passport/
 .obsidian/plugins/vault-passport/build/*
 !.obsidian/plugins/vault-passport/build/.gitkeep
+.obsidian/plugins/vault-passport/data.json
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# Generated PDFs and export output
+*.pdf
+# …but the showcase PDF is committed so people can preview the output
+!showcase_documents/Urban Mobility Report.pdf
+
+# Personal / workspace files not meant for the public repo
+showcase_documents/Anleitung*
+showcase_documents/console*
+showcase_documents/hoss_logo.png
+showcase_documents/Pasted image*
+showcase_documents/Lovro*
+
+# Local-only publishing notes (kept on disk, not version-controlled)
+PUBLISHING.md
+showcase_documents/forum-post-draft.md

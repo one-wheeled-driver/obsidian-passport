@@ -1,107 +1,82 @@
----
-cite-key: README
-type: misc
-title: README
-subtitle:
-author: Dominik Lorenz
-year:
-date: 2026-02-23
-titlepage: true
-header-right: ""
-numbersections: true
-geometry: margin=2.5cm
-colorlinks: true
-linkcolor: blue
-urlcolor: blue
-citecolor: blue
----
 # Vault Passport
 
 > Give your Obsidian notes a passport to the outside world.
 
-Obsidian is a powerful knowledge base — but the moment you try to share a document with someone outside your vault, it falls apart. `[[wiki-links]]` are meaningless to any reader who does not have your vault. Embedded PDFs become broken references. Citations look like `[[Smith 2023]]` instead of proper bibliography entries.
+Obsidian is a powerful knowledge base — but the moment you share a document with someone outside your vault, it falls apart. `[[wiki-links]]` are meaningless to any reader who does not have your vault. Embedded PDFs become broken references. Citations look like `[[Smith 2023]]` instead of proper bibliography entries.
 
 **Vault Passport** solves this. It exports any Obsidian document to a polished, self-contained PDF by resolving every `[[wiki-link]]` into a real citation, building a proper BibTeX bibliography, and running Pandoc to produce output you can hand to a colleague, submit to a journal, or attach to a report — no vault required.
 
 ## How it works
 
-Each linked note that has a `cite-key` in its YAML front matter becomes a `[@cite-key]` Pandoc citation. Vault Passport collects all those citations, builds a `.bib` file on the fly, and passes everything to Pandoc with `--citeproc` so the final PDF has a proper reference list. Notes without a `cite-key` are replaced with readable plain text so no link is ever left dangling.
+Every `[[linked note]]` that exists in your vault becomes a `[@cite-key]` Pandoc citation. Vault Passport collects all citations, builds a `.bib` file on the fly, and passes everything to Pandoc with `--citeproc` so the final PDF has a proper reference list.
 
-## Dependencies
+**No note metadata required.** If a linked note has a `cite-key` in its YAML front matter that value is used as-is. If not, a cite key is automatically derived from the note's name (`My Study` → `[@my-study]`) and the filename is used as the title. You can start with zero front matter and add proper bibliographic metadata later.
 
-- Python 3.6+
-- [pyyaml](https://pypi.org/project/PyYAML/)
-- [Pandoc 3.x](https://pandoc.org/)
-- A LaTeX distribution with **XeLaTeX** — included in [TeX Live](https://tug.org/texlive/) and [MiKTeX](https://miktex.org/)
+Notes that do not exist in the vault at all are replaced with readable plain text — no broken link is ever left in the output.
+
+## Requirements
+
+- **Docker** — Vault Passport runs Pandoc inside the [`pandoc/extra`](https://hub.docker.com/r/pandoc/extra) container, which ships with XeLaTeX, citeproc, and the [Eisvogel](https://github.com/Wandmalfarbe/pandoc-latex-template) template out of the box. You do not need to install Pandoc or a TeX distribution separately.
+- **Python 3.8+** with `pyyaml` (`pip install pyyaml`)
+
+### Docker on Windows
+
+Docker Desktop is available for Windows and works with this plugin. The plugin and its Docker integration have been developed on Linux and macOS. **Windows users — we'd love your feedback.** If you encounter any path or permission issues please [open an issue](https://github.com/one-wheeled-driver/obsidian-passport/issues).
 
 ## Installation
 
-The plugin lives inside the vault at `.obsidian/plugins/vault-passport/`. The repo root **is** the vault root — no separate install step is needed.
+### Via BRAT (recommended while awaiting community plugin approval)
+
+1. Install [BRAT](https://github.com/TfTHacker/obsidian42-brat) from the Obsidian community plugins browser.
+2. Open the BRAT settings and click **"Add Beta Plugin"**.
+3. Enter `https://github.com/one-wheeled-driver/obsidian-passport`.
+4. Enable the plugin under **Settings → Community plugins**.
+
+### Manual installation
+
+1. Download `main.js` and `manifest.json` from the [latest release](https://github.com/one-wheeled-driver/obsidian-passport/releases/latest).
+2. Create the folder `.obsidian/plugins/vault-passport/` inside your vault.
+3. Copy both files into that folder.
+4. Enable the plugin under **Settings → Community plugins**.
+
+### Python dependency
 
 ```bash
-git clone <repo-url>
-cd vault-passport-vault
-pip install -r requirements.txt
+pip install pyyaml
 ```
 
-Inside Obsidian, enable the plugin under **Settings → Community plugins → Vault Passport**.
+## Quick start
 
-## Usage
+1. Open any Markdown note in Obsidian.
+2. Open the command palette (`Ctrl/Cmd + P`) and run **"Export document (Vault Passport)"**.
+3. The PDF appears next to the original file.
 
-Export is triggered from the Obsidian command palette: **"Export document (Vault Passport)"**. The active markdown file is exported to a PDF placed next to it in the vault.
+## Plugin settings
 
-You can also run the script directly from the command line:
+| Setting | Default | Description |
+|---|---|---|
+| Python path | `python3` | Path to the Python interpreter |
+| Strict mode | off | Abort export if any linked note is missing |
+| Open PDF after export | on | Open the generated PDF automatically |
+| Table of contents | off | Include a TOC in the PDF |
+| Convert callouts to boxes | off | Convert Obsidian callouts to styled LaTeX boxes |
+| Template name | *(empty)* | Pandoc template, e.g. `eisvogel` |
+| Vault template folder | `templates` | Folder relative to vault root for shared templates |
+| Extra pandoc variables | *(empty)* | One `key=value` per line, passed as `-V` flags |
 
-```bash
-python3 .obsidian/plugins/vault-passport/vault_passport.py <input_file> <vault_path> [options]
-```
+## How notes become citations
 
-**Positional arguments:**
+Any `[[linked note]]` that resolves to a file in your vault becomes a citation in the output:
 
-| Argument | Description |
+| Note has… | Result |
 |---|---|
-| `input_file` | Path to the main Obsidian document (markdown) |
-| `vault_path` | Path to the Obsidian vault root |
+| `cite-key: smith2024` in front matter | `[@smith2024]` |
+| No front matter at all | `[@my-linked-note]` (auto-derived) |
+| A `title` field | Used in the bibliography |
+| No `title` field | Filename stem used as the title |
+| Note does not exist in vault | Replaced with readable plain text |
 
-**Options:**
-
-| Flag | Description |
-|---|---|
-| `--strict` | Abort on first missing note or note without `cite-key` (exit code 1) |
-| `--toc` | Include a table of contents in the PDF |
-| `--template NAME` | Template name or filename (see [Templates](#templates) below) |
-| `--vault-template-dir DIR` | Folder relative to vault root for shared templates (default: `templates`) |
-| `--var KEY=VALUE` | Extra pandoc template variable; can be given multiple times |
-| `--callouts` | Convert Obsidian callouts to styled awesomebox environments |
-
-### Quick examples
-
-```bash
-# Basic export
-python3 .obsidian/plugins/vault-passport/vault_passport.py ~/vault/my-paper.md ~/vault
-
-# With table of contents
-python3 .obsidian/plugins/vault-passport/vault_passport.py ~/vault/my-paper.md ~/vault --toc
-
-# With the eisvogel template and callout conversion
-python3 .obsidian/plugins/vault-passport/vault_passport.py ~/vault/my-paper.md ~/vault \
-  --template eisvogel --callouts
-```
-
-## Output
-
-The PDF is placed next to the original file. Intermediate build files go to `.obsidian/plugins/vault-passport/build/`:
-
-```
-Input:  /path/to/my-doc.md
-Output: /path/to/my-doc.pdf                                           # PDF next to original
-        .obsidian/plugins/vault-passport/build/my-doc.md             # intermediate markdown
-        .obsidian/plugins/vault-passport/build/references.bib        # BibTeX references
-```
-
-## Note format
-
-Notes that serve as citable references need YAML front matter with a `cite-key`:
+A note intended as a citable reference might look like this:
 
 ```yaml
 ---
@@ -114,211 +89,146 @@ publisher: "Academic Press"
 ---
 ```
 
-The `type` field maps to BibTeX entry types (`book`, `article`, `misc`, etc.). Supported BibTeX fields: `author`, `title`, `year`, `journal`, `publisher`, `url`, `note`.
-
-Notes without a `cite-key` are not errors — their links become readable plain text instead of citations.
+The `type` field maps to BibTeX entry types (`book`, `article`, `misc`, etc.). All fields except `cite-key` are optional. Supported BibTeX fields: `author`, `title`, `year`, `journal`, `publisher`, `url`, `note`.
 
 ## Obsidian link types
 
-All wiki-link variants are resolved so the output is readable without the vault:
+All wiki-link variants are handled so the output is readable without the vault:
 
-| Syntax | Description | Behavior |
-|---|---|---|
-| `[[Note]]` | Basic wiki-link | Citation if note has cite-key, otherwise plain text |
-| `[[Note\|Display Text]]` | Wiki-link with alias | Citation or display text fallback |
-| `[[Note#Heading]]` | Link to heading | Citation or "Note, section Heading" |
-| `[[Note#Heading\|Text]]` | Heading link with alias | Citation or display text fallback |
-| `[[Note#^block-id]]` | Block link | Citation or "Note, block block-id" |
-| `[[Note#^block-id\|Text]]` | Block link with alias | Citation or display text fallback |
-| `![[Note]]` | Transclusion | Citation or plain text |
-| `![[Note#Heading]]` | Transclude section | Citation or plain text reference |
-| `![[Note#^block-id]]` | Transclude block | Citation or plain text reference |
-| `![[Image.png]]` | Image embed | Standard markdown `![](Image.png)` |
-| `![[file.pdf]]` | File embed | Citation (via sidecar note) or `[Embedded file: file.pdf]` |
+| Syntax | Behavior |
+|---|---|
+| `[[Note]]` | Citation |
+| `[[Note\|Display Text]]` | Citation (display text ignored in output) |
+| `[[Note#Heading]]` | Citation |
+| `[[Note#Heading\|Text]]` | Citation |
+| `[[Note#^block-id]]` | Citation |
+| `[[Note#^block-id\|Text]]` | Citation |
+| `![[Note]]` | Citation |
+| `![[Note#Heading]]` | Citation |
+| `![[Note#^block-id]]` | Citation |
+| `![[Image.png]]` | Standard Markdown image `![](Image.png)` |
+| `![[file.pdf]]` | Citation via sidecar note, or `[Embedded file: file.pdf]` |
 
 ### Sidecar notes for embedded files
 
-When a document embeds a non-markdown file (e.g. `![[paper.pdf]]`), Vault Passport checks for a sidecar note with the same base name (`paper.md`). If that sidecar has a `cite-key`, the embed becomes a citation. Otherwise it becomes `[Embedded file: paper.pdf]`.
+When a document embeds a non-Markdown file (e.g. `![[paper.pdf]]`), Vault Passport checks for a sidecar note with the same base name (`paper.md`). If found, the embed becomes a citation using that note's metadata. Otherwise it becomes `[Embedded file: paper.pdf]`.
 
 ## Templates
 
-The `--template` option accepts a name resolved in this order:
+The `--template` option (or the **Template name** setting) resolves in this order:
 
-1. **Vault template folder** — `<vault>/<vault-template-dir>/<name>` (default folder: `templates/`). Commit templates here so everyone working on the vault uses the same one automatically.
-2. **Plugin templates directory** — `.obsidian/plugins/vault-passport/templates/<name>`. For per-user templates not committed to the vault.
-3. **System-wide pandoc install** — the name is passed as-is to pandoc, which looks in its own data directory (`~/.local/share/pandoc/templates/` on Linux, `~/Library/Pandoc/` on macOS). This is how named templates like `eisvogel` work after a system install.
+1. `<vault>/<vault-template-dir>/<name>` — shared vault template; commit here so everyone working on the vault uses the same one.
+2. `.obsidian/plugins/vault-passport/templates/<name>` — per-user plugin template.
+3. The bare name passed to Pandoc for resolution from its data directory (or the container's built-in templates).
 
-### Using eisvogel
+### Eisvogel
 
-[Eisvogel](https://github.com/Wandmalfarbe/pandoc-latex-template) is a polished pandoc LaTeX template that produces professional PDFs with cover pages, running headers, syntax-highlighted code, and more. It pairs naturally with Vault Passport.
+[Eisvogel](https://github.com/Wandmalfarbe/pandoc-latex-template) is included in the `pandoc/extra` Docker image — **no separate installation needed.** Simply set the template name to `eisvogel`:
 
-**Option A — system-wide install (recommended for solo use)**
+In the plugin settings, set **Template name** to `eisvogel`.
 
-Follow the [eisvogel install instructions](https://github.com/Wandmalfarbe/pandoc-latex-template#installation) to place `eisvogel.latex` in your pandoc data directory, then use the bare name:
-
-```bash
-python3 .obsidian/plugins/vault-passport/vault_passport.py my-paper.md . --template eisvogel
-```
-
-**Option B — vault-level install (recommended for shared vaults)**
-
-Place `eisvogel.latex` in the vault's `templates/` folder and commit it. Everyone cloning the vault gets the same template automatically:
-
-```
-vault/
-├── templates/
-│   └── eisvogel.latex   ← committed to the repo
-├── my-paper.md
-└── ...
-```
-
-```bash
-python3 .obsidian/plugins/vault-passport/vault_passport.py my-paper.md . --template eisvogel.latex
-```
-
-### Template variables
-
-Pandoc passes `--var` values to the template. These act as **defaults** — any matching key in the document's YAML front matter overrides them.
-
-**General pandoc variables** (work with any LaTeX template):
-
-```bash
-python3 vault_passport.py my-paper.md . --template eisvogel \
-  --var papersize=a4 \
-  --var geometry=margin=2.5cm \
-  --var mainfont="Source Serif 4" \
-  --var colorlinks=true
-```
-
-**Eisvogel-specific variables:**
-
-```bash
-# Cover page with a coloured title block
-python3 vault_passport.py my-paper.md . --template eisvogel \
-  --var titlepage=true \
-  --var titlepage-color=2c3e50 \
-  --var titlepage-text-color=FFFFFF \
-  --var titlepage-rule-color=FFFFFF \
-  --var titlepage-rule-height=4
-
-# Cover page with a logo
-# The logo path is relative to the vault root — Vault Passport resolves it to
-# an absolute path automatically so xelatex can find it regardless of where
-# the script is invoked from.
-python3 vault_passport.py my-paper.md . --template eisvogel \
-  --var titlepage=true \
-  --var titlepage-logo=assets/logo.png \
-  --var logo-width=60mm
-
-# Custom header and footer
-python3 vault_passport.py my-paper.md . --template eisvogel \
-  --var header-left="Project Report" \
-  --var header-right="Confidential" \
-  --var footer-center="\thepage"
-
-# Syntax-highlighted code blocks
-python3 vault_passport.py my-paper.md . --template eisvogel \
-  --var listings=true \
-  --var "code-block-font-size=\small"
-```
-
-### Setting defaults in YAML front matter
-
-Put the same keys directly in the document's front matter to set per-document defaults without touching the command line:
-
-```yaml
----
-title: "Quarterly Review"
-author: "Alice Johnson"
-date: "2026-02-22"
-titlepage: true
-titlepage-color: "1a1a2e"
-titlepage-text-color: "FFFFFF"
-colorlinks: true
-linkcolor: blue
-geometry: margin=2.5cm
----
-```
-
-Front matter always takes precedence over `--var` flags, so you can set organisation-wide defaults in the Obsidian plugin settings and override them per document in front matter.
-
-### Obsidian plugin settings for templates
-
-The plugin settings tab exposes all template options without the command line:
-
-- **Template name** — equivalent to `--template`
-- **Vault template folder** — equivalent to `--vault-template-dir` (default: `templates`)
-- **Extra pandoc variables** — equivalent to repeated `--var`; one `key=value` per line
-
-Example content for the "Extra pandoc variables" box:
-
-```
-titlepage=true
-titlepage-color=2c3e50
-titlepage-text-color=FFFFFF
-colorlinks=true
-geometry=margin=2.5cm
-```
-
-## Callout conversion
-
-Obsidian callouts (`> [!TYPE]`) can be automatically converted to styled LaTeX boxes in the exported PDF using the `--callouts` flag. Vault Passport uses the **awesomebox** package — the same one used in eisvogel's official examples.
+Or from the CLI:
 
 ```bash
 python3 .obsidian/plugins/vault-passport/vault_passport.py my-paper.md . \
   --template eisvogel --callouts
 ```
 
-`\usepackage{awesomebox}` is injected into the document preamble automatically — no manual front matter entry is needed.
+### Template variables
 
-### Syntax supported
+Pandoc passes `--var` values to the template. These act as **defaults** — any matching key in the document's YAML front matter overrides them. Set global defaults in the **Extra pandoc variables** settings box (one `key=value` per line):
+
+```
+titlepage=true
+titlepage-color=2c3e50
+titlepage-text-color=FFFFFF
+colorlinks=true
+numbersections=true
+```
+
+Or put them directly in the document's front matter for per-document control:
+
+```yaml
+---
+title: "Quarterly Review"
+author: "Alice Johnson"
+date: "2026-01-15"
+titlepage: true
+titlepage-color: "1a1a2e"
+colorlinks: true
+geometry: margin=2.5cm
+---
+```
+
+**Eisvogel-specific variables:**
+
+| Variable | Description |
+|---|---|
+| `titlepage=true` | Enable the cover page |
+| `titlepage-color` | Cover background colour (hex, no `#`) |
+| `titlepage-text-color` | Cover text colour |
+| `titlepage-logo` | Path to logo image (relative to vault root) |
+| `logo-width` | Logo width, e.g. `60mm` |
+| `header-left` / `header-right` | Running header content |
+| `footer-center` | Footer content, e.g. `\thepage` |
+| `listings=true` | Syntax-highlighted code blocks |
+| `numbersections=true` | Numbered section headings |
+
+## Callout conversion
+
+With **Convert callouts to boxes** enabled, Obsidian callouts are converted to styled LaTeX boxes in the PDF using the [awesomebox](https://ctan.org/pkg/awesomebox) package (included in `pandoc/extra`).
 
 ```markdown
 > [!NOTE] Optional title
 > Body text here.
-> More body text.
-```
-
-> [!NOTE] Optional title
-> Body text here.
-> More body text.
-
-```markdown
-> [!WARNING]
-> No explicit title — the type name ("Warning") is used automatically.
-```
 
 > [!WARNING]
-> No explicit title — the type name ("Warning") is used automatically.
-
-```markdown
-> [!TIP]+ Expanded by default    ← the +/- fold modifier is stripped
-> Tip content.
+> No title — the type name is used automatically.
 ```
 
-Regular blockquotes without `[!TYPE]` are left completely untouched.
+The `+`/`-` fold modifiers are silently stripped. Regular blockquotes without `[!TYPE]` are left untouched.
 
-### Type mapping
+### Callout type mapping
 
-All standard Obsidian callout types map to one of the five awesomebox environments. **Custom or unknown types always fall back to `noteblock`** — a LaTeX error is never produced.
-
-| Obsidian type(s) | awesomebox environment | Colour |
+| Obsidian type(s) | LaTeX environment | Colour |
 |---|---|---|
-| `note`, `info`, `todo`, `abstract`, `summary`, `tldr`, `question`, `help`, `faq`, `example`, `quote`, `cite` | `noteblock` | blue |
+| `note`, `info`, `todo`, `abstract`, `summary`, `tldr`, `question`, `help`, `faq`, `example`, `quote`, `cite`, `important` | `noteblock` | blue |
 | `tip`, `hint`, `success`, `check`, `done` | `tipblock` | green |
 | `warning`, `caution`, `attention` | `warningblock` | orange |
 | `danger`, `error`, `bug`, `failure`, `fail`, `missing` | `cautionblock` | red |
-| `important` | `noteblock` | blue |
 | *(anything else)* | `noteblock` | blue |
-
-> **Note on `important`:** awesomebox v0.6 (shipped with TeX Live) provides an `importantblock` environment, but it was renamed across versions and is not consistently available. To avoid LaTeX errors on standard installations, `important` is mapped to the safe `noteblock` fallback instead.
-
-
-Toggle **"Convert callouts to boxes"** in the plugin settings tab to enable this globally without the command-line flag.
 
 ## Strict mode
 
-By default, missing notes and notes without a `cite-key` produce warnings on stderr and the link is replaced with plain text. With `--strict`, the script aborts on the first such issue with exit code 1. This is useful in CI pipelines where a broken link should be a hard error.
+By default, links to notes that are missing from the vault are replaced with plain text and a warning is printed on stderr. With `--strict`, the script aborts on the first missing note with exit code 1. This is useful in CI pipelines where a broken link should be a hard error.
+
+## CLI usage
+
+The Python script can be run directly, which is useful for scripting and CI:
+
+```bash
+python3 .obsidian/plugins/vault-passport/vault_passport.py <input_file> <vault_path> [options]
+```
+
+| Argument / Flag | Description |
+|---|---|
+| `input_file` | Path to the Markdown document to export |
+| `vault_path` | Path to the Obsidian vault root |
+| `--strict` | Abort on missing notes (exit code 1) |
+| `--toc` | Include a table of contents |
+| `--template NAME` | Template name or filename |
+| `--vault-template-dir DIR` | Shared template folder (default: `templates`) |
+| `--var KEY=VALUE` | Extra Pandoc variable; repeatable |
+| `--callouts` | Convert callouts to awesomebox environments |
+
+## Output
+
+```
+Input:  /vault/my-paper.md
+Output: /vault/my-paper.pdf                                          ← PDF next to original
+        .obsidian/plugins/vault-passport/build/my-paper.md          ← intermediate markdown
+        .obsidian/plugins/vault-passport/build/references.bib       ← generated bibliography
+```
 
 ## Running tests
 
@@ -327,6 +237,10 @@ pip install pytest pyyaml
 python3 -m pytest tests/ -v
 ```
 
+## Contributing
+
+Bug reports and pull requests are welcome at [github.com/one-wheeled-driver/obsidian-passport](https://github.com/one-wheeled-driver/obsidian-passport).
+
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
