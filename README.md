@@ -6,6 +6,8 @@ Obsidian is a powerful knowledge base — but the moment you share a document wi
 
 **Vault Passport** solves this. It exports any Obsidian document to a polished, self-contained PDF by resolving every `[[wiki-link]]` into a real citation, building a proper BibTeX bibliography, and running Pandoc to produce output you can hand to a colleague, submit to a journal, or attach to a report — no vault required.
 
+> **Roadmap.** Today every linked note becomes a citation, including `![[transclusions]]`. The plan is to eventually inline-expand transclusions properly so `![[Note]]` pulls the linked note's content into the document (with `![[Note#Heading]]` and `![[Note#^block-id]]` doing the obvious thing for sections and blocks), while plain `[[wiki-links]]` remain citations. Feedback on this direction is welcome on the GitHub issue tracker.
+
 ## How it works
 
 Every `[[linked note]]` that exists in your vault becomes a `[@cite-key]` Pandoc citation. Vault Passport collects all citations, builds a `.bib` file on the fly, and passes everything to Pandoc with `--citeproc` so the final PDF has a proper reference list.
