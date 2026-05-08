@@ -9,6 +9,13 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
+# Node / TypeScript build outputs
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+main.js
+
 # Generated PDFs and export output
 *.pdf
 # …but the showcase PDF is committed so people can preview the output

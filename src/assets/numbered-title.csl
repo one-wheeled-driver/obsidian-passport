@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" class="in-text" version="1.0">
+  <info>
+    <title>Numbered with Title</title>
+    <id>numbered-title</id>
+    <updated>2024-01-01T00:00:00+00:00</updated>
+  </info>
+
+  <citation collapse="citation-number">
+    <sort>
+      <key variable="citation-number"/>
+    </sort>
+    <layout delimiter="; " prefix="[" suffix="]">
+      <text variable="citation-number"/>
+      <text value=", "/>
+      <text variable="title" quotes="true"/>
+    </layout>
+  </citation>
+
+  <bibliography entry-spacing="1" second-field-align="flush">
+    <sort>
+      <key variable="citation-number"/>
+    </sort>
+    <layout>
+      <text variable="citation-number" prefix="[" suffix="] "/>
+      <text variable="author" suffix=", "/>
+      <text variable="title" quotes="true" suffix=", "/>
+      <date variable="issued" suffix=". ">
+        <date-part name="year"/>
+      </date>
+      <text variable="container-title" font-style="italic" suffix=". "/>
+      <text variable="publisher" suffix=". "/>
+      <text variable="URL" prefix="&lt;" suffix="&gt;"/>
+    </layout>
+  </bibliography>
+</style>

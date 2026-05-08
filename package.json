@@ -1,0 +1,48 @@
+{
+  "name": "obsidian-passport",
+  "version": "0.1.0",
+  "description": "Export Obsidian documents to polished, self-contained PDFs by resolving [[wiki-links]] into BibTeX citations.",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "wdio run wdio.conf.mts",
+    "lint": "eslint src/ tests/",
+    "format": "prettier --write src/ tests/",
+    "type-check": "tsc -noEmit",
+    "version": "node version-bump.mjs && git add manifest.json versions.json"
+  },
+  "keywords": [
+    "obsidian",
+    "obsidian-plugin",
+    "pdf",
+    "pandoc",
+    "bibtex",
+    "citations"
+  ],
+  "author": "Dominik Lorenz",
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/node": "^24.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.20.0",
+    "@typescript-eslint/parser": "^8.20.0",
+    "@vitest/coverage-v8": "^3.0.0",
+    "builtin-modules": "^4.0.0",
+    "esbuild": "^0.25.0",
+    "eslint": "^9.18.0",
+    "obsidian": "^1.7.2",
+    "prettier": "^3.4.0",
+    "tslib": "^2.8.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.59.2",
+    "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "gray-matter": "^4.0.3"
+  }
+}
