@@ -189,7 +189,7 @@ describe("buildPandocCommand — extra mounts for files outside the vault", () =
     });
     const csl = findFlag(cmd, "--csl=");
     expect(csl).toBe("--csl=/ext0/style.csl");
-    const mounts = cmd.filter((arg, i) => cmd[i - 1] === "-v");
+    const mounts = cmd.filter((_arg, i) => cmd[i - 1] === "-v");
     expect(mounts).toContain("/usr/share/csl:/ext0:ro");
   });
 
@@ -208,7 +208,7 @@ describe("buildPandocCommand — extra mounts for files outside the vault", () =
     expect(tmpl).toBe("--template=/ext0/template.latex");
     const extMounts = cmd
       .map((a, i) => (cmd[i - 1] === "-v" && a.includes(":ro") ? a : null))
-      .filter((x): x is string => x !== null);
+      .filter((x: string | null): x is string => x !== null);
     expect(extMounts).toEqual(["/shared:/ext0:ro"]);
   });
 
