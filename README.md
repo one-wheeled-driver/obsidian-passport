@@ -27,25 +27,34 @@ Docker Desktop is available for Windows and works with this plugin. The plugin a
 
 ## Installation
 
-### Via BRAT (recommended while awaiting community plugin approval)
+> Vault Passport ships a Python script and a CSL file alongside `main.js`. The Obsidian community plugin browser and BRAT both only deliver `main.js` + `manifest.json`, so neither can install Vault Passport correctly today. Use the manual install below until that's resolved.
 
-1. Install [BRAT](https://github.com/TfTHacker/obsidian42-brat) from the Obsidian community plugins browser.
-2. Open the BRAT settings and click **"Add Beta Plugin"**.
-3. Enter `https://github.com/one-wheeled-driver/obsidian-passport`.
-4. Enable the plugin under **Settings → Community plugins**.
+The plugin folder needs four files: `main.js`, `manifest.json`, `vault_passport.py`, and `numbered-title.csl`.
 
-### Manual installation
+### Option A — download the release zip (recommended)
 
-1. Download `main.js` and `manifest.json` from the [latest release](https://github.com/one-wheeled-driver/obsidian-passport/releases/latest).
-2. Create the folder `.obsidian/plugins/vault-passport/` inside your vault.
-3. Copy both files into that folder.
-4. Enable the plugin under **Settings → Community plugins**.
+1. Go to [Releases](https://github.com/one-wheeled-driver/obsidian-passport/releases/latest) and download `vault-passport.zip` from the assets.
+2. Extract it into your vault's `.obsidian/plugins/` folder so you end up with:
+   ```
+   <your vault>/.obsidian/plugins/vault-passport/
+   ├── main.js
+   ├── manifest.json
+   ├── vault_passport.py
+   └── numbered-title.csl
+   ```
+3. Install the Python dependency: `pip install pyyaml`
+4. In Obsidian: **Settings → Community plugins → Installed plugins → Vault Passport → enable**.
 
-### Python dependency
+### Option B — clone the repo
 
 ```bash
+git clone https://github.com/one-wheeled-driver/obsidian-passport.git /tmp/obsidian-passport
+cp -r /tmp/obsidian-passport/.obsidian/plugins/vault-passport \
+      /path/to/your/vault/.obsidian/plugins/
 pip install pyyaml
 ```
+
+To upgrade later, re-download the zip (Option A) or `git pull` and re-run the `cp -r` (Option B).
 
 ## Quick start
 
