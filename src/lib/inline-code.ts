@@ -33,10 +33,13 @@ export function protectInlineCode(text: string): InlineCodeProtection {
 
   function restore(transformed: string): string {
     let s = transformed;
-    for (let i = 0; i < spans.length; i += 1) {
-      // Escape nothing — the placeholder is NUL-delimited and won't collide
-      // with any user content (NULs aren't valid in Markdown source).
-      s = s.split(`${PLACEHOLDER_PREFIX}${i}${PLACEHOLDER_SUFFIX}`).join(spans[i]!);
+    // Iterate with entries() so the span value is typed `string`, not
+    // `string | undefined` (which it would be under noUncheckedIndexedAccess
+    // for spans[i]).
+    for (const [i, span] of spans.entries()) {
+      // The placeholder is NUL-delimited and won't collide with any user
+      // content (NULs aren't valid in Markdown source).
+      s = s.split(`${PLACEHOLDER_PREFIX}${i}${PLACEHOLDER_SUFFIX}`).join(span);
     }
     return s;
   }

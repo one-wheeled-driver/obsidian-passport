@@ -31,6 +31,18 @@ describe("listVaultMarkdownFiles", () => {
     expect(files.map((f) => f.path)).toEqual(["Note.md"]);
   });
 
+  it("respects a user-renamed config folder (vault.configDir)", () => {
+    const app = mockApp();
+    app.vault.configDir = ".my-config";
+    app.vault.add("Note.md", "");
+    app.vault.add(".my-config/Some Config.md", "");
+    // A folder literally named ".obsidian" is now just a regular folder —
+    // its markdown files should be visible.
+    app.vault.add(".obsidian/historical-note.md", "");
+    const files = listVaultMarkdownFiles(app).map((f) => f.path).sort();
+    expect(files).toEqual(["Note.md", ".obsidian/historical-note.md"].sort());
+  });
+
   it("excludes files inside .trash/", () => {
     const app = mockApp();
     app.vault.add("Note.md", "");

@@ -45,6 +45,19 @@ describe("resolveNote", () => {
     expect(resolveNote(app, "Some Config", "main.md")).toBeNull();
   });
 
+  it("respects a user-renamed config folder (vault.configDir)", () => {
+    const app = mockApp();
+    app.vault.configDir = ".my-config";
+    app.vault.add(".my-config/Some Config.md", "");
+    expect(resolveNote(app, "Some Config", "main.md")).toBeNull();
+    // A note literally inside `.obsidian/` is no longer special — should
+    // resolve normally.
+    app.vault.add(".obsidian/historical-note.md", "");
+    expect(resolveNote(app, "historical-note", "main.md")?.path).toBe(
+      ".obsidian/historical-note.md"
+    );
+  });
+
   it("returns the first match when multiple files share a basename", () => {
     const app = mockApp();
     const first = app.vault.add("folderA/Dup.md", "");

@@ -226,7 +226,7 @@ function formatScalar(value: unknown): string {
       return `'${value.replace(/'/g, "''")}'`;
     }
     // Plain strings of safe chars don't need quoting at all.
-    if (/^[\w./\-]+$/.test(value)) return value;
+    if (/^[\w./-]+$/.test(value)) return value;
     // Otherwise double-quote and escape internal double-quotes.
     return `"${value.replace(/"/g, '\\"')}"`;
   }

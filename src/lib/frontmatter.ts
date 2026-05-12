@@ -63,7 +63,9 @@ export function injectAwesomebox(
   if (existing == null) {
     list = [];
   } else if (Array.isArray(existing)) {
-    list = [...existing];
+    // existing is `unknown` at the type level; Array.isArray narrows to any[],
+    // but we re-widen to unknown[] explicitly to avoid an unsafe-spread lint.
+    list = (existing as unknown[]).slice();
   } else {
     list = [existing];
   }

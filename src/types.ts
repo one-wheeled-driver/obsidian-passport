@@ -30,6 +30,11 @@ export interface MetadataCacheLike {
 export interface VaultLike {
   getMarkdownFiles(): VaultFileLike[];
   cachedRead(file: VaultFileLike): Promise<string>;
+  /**
+   * Vault-relative path to the Obsidian configuration folder. Defaults to
+   * `.obsidian` but the user can rename it, so we must never hardcode.
+   */
+  configDir: string;
 }
 
 /**

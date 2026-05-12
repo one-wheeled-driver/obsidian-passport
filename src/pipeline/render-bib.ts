@@ -13,10 +13,22 @@ export function renderBib(
   const seenKeys = new Set<string>();
   let out = "";
   for (const yamlData of Object.values(metadata)) {
-    const key = String(yamlData["cite-key"] ?? "");
+    const key = citeKeyAsString(yamlData["cite-key"]);
     if (seenKeys.has(key)) continue;
     seenKeys.add(key);
     out += yamlToBibtex(yamlData);
   }
   return out;
+}
+
+/**
+ * Coerce a cite-key value to a string safely. We accept strings and numbers
+ * (YAML happily parses unquoted digits as numbers); anything else (objects,
+ * arrays) would stringify to `[object Object]` or comma-joined garbage,
+ * which would corrupt the dedup set, so we treat those as missing.
+ */
+function citeKeyAsString(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "bigint") return String(value);
+  return "";
 }

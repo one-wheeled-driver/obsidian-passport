@@ -40,6 +40,12 @@ interface FileEntry {
 export class MockVault {
   private files: Map<string, FileEntry> = new Map();
 
+  /**
+   * Default Obsidian config folder name. Tests that exercise a renamed
+   * config folder (the Obsidian user-config feature) can mutate this.
+   */
+  configDir = ".obsidian";
+
   /** Register a file at the given vault-relative path. */
   add(
     filePath: string,

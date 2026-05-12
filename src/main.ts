@@ -1,5 +1,4 @@
-import { Plugin } from "obsidian";
-import type { TFile } from "obsidian";
+import { Plugin, TFile } from "obsidian";
 import { join, normalize } from "node:path";
 import { writeFile } from "node:fs/promises";
 
@@ -24,13 +23,17 @@ export default class VaultPassportPlugin extends Plugin {
     await this.ensureEmbeddedCsl();
 
     this.addCommand({
-      id: "vault-passport-export",
-      name: "Export document (Vault Passport)",
+      // Obsidian prefixes the command id with the plugin id automatically,
+      // and renders the plugin name next to the command name in the palette,
+      // so neither should be repeated here.
+      id: "export",
+      name: "Export document",
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
-        if (!file || file.extension !== "md") return false;
+        if (!(file instanceof TFile) || file.extension !== "md") return false;
         if (!checking) {
-          void exportPdf(this.app, file as TFile, this.manifest.dir ?? "", this.settings);
+          // Fire-and-forget the async export; failures surface via Notice.
+          void exportPdf(this.app, file, this.manifest.dir ?? "", this.settings);
         }
         return true;
       },
@@ -39,7 +42,9 @@ export default class VaultPassportPlugin extends Plugin {
     this.addSettingTab(new VaultPassportSettingTab(this.app, this));
   }
 
-  override async onunload(): Promise<void> {
+  // Note: Plugin.onunload's declared return type is `void`, not
+  // `Promise<void>` — keep this synchronous to match.
+  override onunload(): void {
     // No cleanup required: no listeners or external state to tear down.
   }
 

@@ -5,7 +5,9 @@ import { splitFencedBlocks } from "./fenced-blocks.js";
 //   ^> [!TYPE][+-]? optional title
 //   (zero or more body lines that start with `>`)
 // Multiline mode required so `^` matches at every line start.
-const CALLOUT_RE = /^> \[!(\w+)\][+\-]?[ \t]*(.*)\n((?:^>.*\n)*)/gm;
+// Note: `-` placed at the start of the character class is treated literally;
+// `\-` would trigger ESLint's no-useless-escape rule.
+const CALLOUT_RE = /^> \[!(\w+)\][-+]?[ \t]*(.*)\n((?:^>.*\n)*)/gm;
 
 /**
  * Convert Obsidian callouts (`> [!TYPE] Title` … body lines …) to raw-LaTeX
