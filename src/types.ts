@@ -32,6 +32,14 @@ export interface VaultLike {
   cachedRead(file: VaultFileLike): Promise<string>;
 }
 
+/**
+ * Minimal adapter surface for the bits of FileSystemAdapter we use.
+ * Lets tests stub file-existence checks without instantiating Obsidian.
+ */
+export interface AdapterLike {
+  exists(vaultRelativePath: string): Promise<boolean>;
+}
+
 export interface AppLike {
   vault: VaultLike;
   metadataCache: MetadataCacheLike;

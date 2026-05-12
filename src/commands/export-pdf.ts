@@ -6,7 +6,7 @@ import { exec } from "node:child_process";
 import type { VaultPassportSettings } from "../settings.js";
 import { parseExtraVars } from "../settings.js";
 import { processDocument } from "../pipeline/process-document.js";
-import type { LocalTemplate } from "../lib/docker-args.js";
+import { resolveTemplate as resolveTemplateService } from "../services/template-resolver.js";
 
 /**
  * Run the export pipeline for the active markdown file.
@@ -38,12 +38,13 @@ export async function exportPdf(
   new Notice("Vault Passport: exporting…");
 
   try {
-    const template = await resolveTemplate(
+    const template = await resolveTemplateService({
       adapter,
       vaultPath,
       pluginDir,
-      settings
-    );
+      templateName: settings.templateName,
+      vaultTemplateDir: settings.vaultTemplateDir,
+    });
 
     const result = await processDocument({
       app,
@@ -75,43 +76,6 @@ export async function exportPdf(
     new Notice(`Vault Passport: export failed.\n${msg}`, 10000);
     console.error("Vault Passport error:", err);
   }
-}
-
-/**
- * Resolve the configured template name to either a local file path
- * (mounted into the container by the runner) or a bare string passed
- * through to pandoc/extra (which ships with eisvogel and others).
- *
- * Resolution order: vault template dir → plugin templates dir → bare name.
- */
-async function resolveTemplate(
-  adapter: FileSystemAdapter,
-  vaultPath: string,
-  pluginDir: string,
-  settings: VaultPassportSettings
-): Promise<string | LocalTemplate | undefined> {
-  const name = settings.templateName.trim();
-  if (!name) return undefined;
-
-  const candidates = [
-    join(vaultPath, normalizePath(settings.vaultTemplateDir), name),
-    join(vaultPath, normalizePath(pluginDir), "templates", name),
-  ];
-  for (const candidate of candidates) {
-    try {
-      // Adapter API: stat is reliable; fallback to fs.access in test envs.
-      const exists = await adapter.exists(
-        candidate.startsWith(vaultPath)
-          ? candidate.slice(vaultPath.length + 1)
-          : candidate
-      );
-      if (exists) return { absolutePath: candidate };
-    } catch {
-      // ignore — fall through to next candidate
-    }
-  }
-  // Bare name → let pandoc/extra resolve it
-  return name;
 }
 
 /** Open the generated PDF in the system viewer. */
