@@ -20,7 +20,7 @@ Notes that do not exist in the vault at all are replaced with readable plain tex
 
 ### Docker on Windows
 
-Docker Desktop is available for Windows and should with this plugin. The plugin and its Docker integration have been developed on Linux. **Windows and MacOS users — we'd love your feedback.** If you encounter any path or permission issues please [open an issue](https://github.com/one-wheeled-driver/obsidian-passport/issues).
+Docker Desktop is available for Windows and a works with this plugin. The plugin and its Docker integration have been developed on Linux. **Windows and MacOS users — we'd love your feedback.** If you encounter any path or permission issues please [open an issue](https://github.com/one-wheeled-driver/obsidian-passport/issues).
 
 ## Roadmap
 Today every linked note becomes a citation, including `![[transclusions]]`. The plan is to eventually inline-expand transclusions properly so `![[Note]]` pulls the linked note's content into the document (with `![[Note#Heading]]` and `![[Note#^block-id]]` doing the obvious thing for sections and blocks), while plain `[[wiki-links]]` remain citations. Feedback on this direction is welcome on the GitHub issue tracker.
@@ -44,8 +44,6 @@ Today every linked note becomes a citation, including `![[transclusions]]`. The 
 1. Download `main.js` and `manifest.json` from the [latest release](https://github.com/one-wheeled-driver/obsidian-passport/releases/latest)
 2. Place them in your vault's `.obsidian/plugins/vault-passport/`
 3. Enable the plugin in Obsidian
-
-> **No Python required.** v0.2 replaced the Python backend with a TypeScript port — the plugin is now a single bundled `main.js`. If you're upgrading from v0.1, your existing settings carry over.
 
 ## Quick start
 
