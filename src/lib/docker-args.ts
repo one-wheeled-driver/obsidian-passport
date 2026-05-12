@@ -114,10 +114,21 @@ export function buildPandocCommand(options: BuildPandocCommandOptions): string[]
     flags.push("--citeproc", `--bibliography=${containerBib}`);
   }
 
-  // Volume args
-  const volumeArgs: string[] = ["-v", `${mountRoot}:/vault`];
+  // Volume args — use the long-form --mount syntax instead of -v.
+  //
+  // Why: the `-v src:target` form uses `:` as the separator, which is
+  // ambiguous on Windows where source paths contain a drive letter colon
+  // (e.g. `C:\Users\foo:/vault`). The `--mount type=bind,source=...,
+  // target=...` form uses commas, so drive letters are unambiguous and
+  // paths with spaces work without shell quoting (spawn passes each arg
+  // as a single argv element).
+  //
+  // Limitation: --mount values can't contain literal commas or `=`. Both
+  // are extremely rare in vault paths; document and move on.
+  const volumeArgs: string[] = [];
+  volumeArgs.push("--mount", mountSpec(mountRoot, "/vault", false));
   for (const [host, prefix] of extraMounts) {
-    volumeArgs.push("-v", `${host}:${prefix}:ro`);
+    volumeArgs.push("--mount", mountSpec(host, prefix, true));
   }
 
   return [
@@ -131,4 +142,10 @@ export function buildPandocCommand(options: BuildPandocCommandOptions): string[]
     containerPdf,
     ...flags,
   ];
+}
+
+function mountSpec(source: string, target: string, readonly: boolean): string {
+  const parts = [`type=bind`, `source=${source}`, `target=${target}`];
+  if (readonly) parts.push("readonly");
+  return parts.join(",");
 }
