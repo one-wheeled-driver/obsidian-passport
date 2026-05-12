@@ -1,6 +1,6 @@
 {
   "name": "obsidian-passport",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Export Obsidian documents to polished, self-contained PDFs by resolving [[wiki-links]] into BibTeX citations.",
   "main": "main.js",
   "private": true,

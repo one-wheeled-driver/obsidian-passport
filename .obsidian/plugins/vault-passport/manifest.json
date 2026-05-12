@@ -1,7 +1,7 @@
 {
   "id": "vault-passport",
   "name": "Vault Passport",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "minAppVersion": "1.0.0",
   "description": "Give your Obsidian notes a passport to the outside world. Exports documents to polished PDFs, resolving [[wiki-links]] into proper citations so they stand alone without the vault.",
   "author": "Dominik Lorenz",

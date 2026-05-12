@@ -18,8 +18,7 @@ Notes that do not exist in the vault at all are replaced with readable plain tex
 
 ## Requirements
 
-- **Docker** — Vault Passport runs Pandoc inside the [`pandoc/extra`](https://hub.docker.com/r/pandoc/extra) container, which ships with XeLaTeX, citeproc, and the [Eisvogel](https://github.com/Wandmalfarbe/pandoc-latex-template) template out of the box. You do not need to install Pandoc or a TeX distribution separately.
-- **Python 3.8+** with `pyyaml` (`pip install pyyaml`)
+**Docker.** Vault Passport runs Pandoc inside the [`pandoc/extra`](https://hub.docker.com/r/pandoc/extra) container, which ships with XeLaTeX, citeproc, and the [Eisvogel](https://github.com/Wandmalfarbe/pandoc-latex-template) template. You do not need to install Pandoc or a TeX distribution separately — only Docker.
 
 ### Docker on Windows
 
@@ -27,34 +26,25 @@ Docker Desktop is available for Windows and works with this plugin. The plugin a
 
 ## Installation
 
-> Vault Passport ships a Python script and a CSL file alongside `main.js`. The Obsidian community plugin browser and BRAT both only deliver `main.js` + `manifest.json`, so neither can install Vault Passport correctly today. Use the manual install below until that's resolved.
+### Via the community plugins browser (once approved)
 
-The plugin folder needs four files: `main.js`, `manifest.json`, `vault_passport.py`, and `numbered-title.csl`.
+1. In Obsidian: **Settings → Community plugins → Browse**
+2. Search for **Vault Passport**, install, then enable
+3. Make sure Docker is running
 
-### Option A — download the release zip (recommended)
+### Via [BRAT](https://github.com/TfTHacker/obsidian42-brat) (before approval)
 
-1. Go to [Releases](https://github.com/one-wheeled-driver/obsidian-passport/releases/latest) and download `vault-passport.zip` from the assets.
-2. Extract it into your vault's `.obsidian/plugins/` folder so you end up with:
-   ```
-   <your vault>/.obsidian/plugins/vault-passport/
-   ├── main.js
-   ├── manifest.json
-   ├── vault_passport.py
-   └── numbered-title.csl
-   ```
-3. Install the Python dependency: `pip install pyyaml`
-4. In Obsidian: **Settings → Community plugins → Installed plugins → Vault Passport → enable**.
+1. Install BRAT from the community plugins browser
+2. BRAT settings → **Add Beta Plugin** → `https://github.com/one-wheeled-driver/obsidian-passport`
+3. Enable Vault Passport under **Settings → Community plugins**
 
-### Option B — clone the repo
+### Manual installation
 
-```bash
-git clone https://github.com/one-wheeled-driver/obsidian-passport.git /tmp/obsidian-passport
-cp -r /tmp/obsidian-passport/.obsidian/plugins/vault-passport \
-      /path/to/your/vault/.obsidian/plugins/
-pip install pyyaml
-```
+1. Download `main.js` and `manifest.json` from the [latest release](https://github.com/one-wheeled-driver/obsidian-passport/releases/latest)
+2. Place them in your vault's `.obsidian/plugins/vault-passport/`
+3. Enable the plugin in Obsidian
 
-To upgrade later, re-download the zip (Option A) or `git pull` and re-run the `cp -r` (Option B).
+> **No Python required.** v0.2 replaced the Python backend with a TypeScript port — the plugin is now a single bundled `main.js`. If you're upgrading from v0.1, your existing settings carry over.
 
 ## Quick start
 
@@ -66,7 +56,6 @@ To upgrade later, re-download the zip (Option A) or `git pull` and re-run the `c
 
 | Setting | Default | Description |
 |---|---|---|
-| Python path | `python3` | Path to the Python interpreter |
 | Strict mode | off | Abort export if any linked note is missing |
 | Open PDF after export | on | Open the generated PDF automatically |
 | Table of contents | off | Include a TOC in the PDF |
@@ -126,7 +115,7 @@ When a document embeds a non-Markdown file (e.g. `![[paper.pdf]]`), Vault Passpo
 
 ## Templates
 
-The `--template` option (or the **Template name** setting) resolves in this order:
+The **Template name** setting resolves in this order:
 
 1. `<vault>/<vault-template-dir>/<name>` — shared vault template; commit here so everyone working on the vault uses the same one.
 2. `.obsidian/plugins/vault-passport/templates/<name>` — per-user plugin template.
@@ -134,16 +123,7 @@ The `--template` option (or the **Template name** setting) resolves in this orde
 
 ### Eisvogel
 
-[Eisvogel](https://github.com/Wandmalfarbe/pandoc-latex-template) is included in the `pandoc/extra` Docker image — **no separate installation needed.** Simply set the template name to `eisvogel`:
-
-In the plugin settings, set **Template name** to `eisvogel`.
-
-Or from the CLI:
-
-```bash
-python3 .obsidian/plugins/vault-passport/vault_passport.py my-paper.md . \
-  --template eisvogel --callouts
-```
+[Eisvogel](https://github.com/Wandmalfarbe/pandoc-latex-template) is included in the `pandoc/extra` Docker image — **no separate installation needed.** Simply set the template name to `eisvogel` in the plugin settings.
 
 ### Template variables
 
@@ -211,26 +191,7 @@ The `+`/`-` fold modifiers are silently stripped. Regular blockquotes without `[
 
 ## Strict mode
 
-By default, links to notes that are missing from the vault are replaced with plain text and a warning is printed on stderr. With `--strict`, the script aborts on the first missing note with exit code 1. This is useful in CI pipelines where a broken link should be a hard error.
-
-## CLI usage
-
-The Python script can be run directly, which is useful for scripting and CI:
-
-```bash
-python3 .obsidian/plugins/vault-passport/vault_passport.py <input_file> <vault_path> [options]
-```
-
-| Argument / Flag | Description |
-|---|---|
-| `input_file` | Path to the Markdown document to export |
-| `vault_path` | Path to the Obsidian vault root |
-| `--strict` | Abort on missing notes (exit code 1) |
-| `--toc` | Include a table of contents |
-| `--template NAME` | Template name or filename |
-| `--vault-template-dir DIR` | Shared template folder (default: `templates`) |
-| `--var KEY=VALUE` | Extra Pandoc variable; repeatable |
-| `--callouts` | Convert callouts to awesomebox environments |
+By default, links to notes that are missing from the vault are replaced with plain text and a warning is printed in the developer console. With **Strict mode** enabled, the export aborts on the first missing note. Useful when you want a broken link to be a hard error instead of silent plaintext fallback.
 
 ## Output
 
@@ -241,12 +202,19 @@ Output: /vault/my-paper.pdf                                          ← PDF nex
         .obsidian/plugins/vault-passport/build/references.bib       ← generated bibliography
 ```
 
-## Running tests
+## Development
 
 ```bash
-pip install pytest pyyaml
-python3 -m pytest tests/ -v
+npm install
+npm test               # 270+ unit/integration tests with Vitest
+npm run test:coverage  # coverage report
+npm run build          # type-check + esbuild → main.js
+npm run lint           # eslint
 ```
+
+Pure logic (`src/lib/`) is 100% Obsidian-free and tested in plain Node. Services and pipeline modules use a small hand-rolled mock of the Obsidian API in `tests/helpers/obsidian-mocks.ts`.
+
+A real-Docker smoke test that produces an actual PDF is available via `npm run test:manual` (gated separately because it spawns Docker and takes ~15s).
 
 ## Contributing
 
