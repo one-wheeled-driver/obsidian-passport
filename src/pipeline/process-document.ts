@@ -215,11 +215,19 @@ function formatYamlValue(value: unknown): string {
 }
 
 function formatScalar(value: unknown): string {
+  if (value instanceof Date) {
+    // Emit as ISO date (YYYY-MM-DD); pandoc + YAML round-trip cleanly.
+    return value.toISOString().slice(0, 10);
+  }
   if (typeof value === "string") {
-    // Quote strings that contain anything risky (colons, leading whitespace,
-    // YAML special chars). We err on the side of always quoting to be safe.
+    // YAML single-quoted strings don't interpret escapes — use them whenever
+    // the value contains a backslash (e.g. LaTeX commands like \usepackage).
+    if (value.includes("\\")) {
+      return `'${value.replace(/'/g, "''")}'`;
+    }
+    // Plain strings of safe chars don't need quoting at all.
     if (/^[\w./\-]+$/.test(value)) return value;
-    // Escape internal double-quotes and wrap
+    // Otherwise double-quote and escape internal double-quotes.
     return `"${value.replace(/"/g, '\\"')}"`;
   }
   return String(value);
